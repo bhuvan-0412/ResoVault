@@ -1,0 +1,492 @@
+[
+  {
+    "id": "res-ve-1",
+    "title": "Video Editing Assets 1.0 (Drive folder)",
+    "url": "https://drive.google.com/drive/folders/1ACT8cB6JZzuuBt_EcQhKMdzCQzQBv4bu",
+    "category": "Video Editing",
+    "tags": [
+      "video-editing",
+      "assets"
+    ],
+    "notes": "Google Drive folder containing video editing assets v1.0.",
+    "createdAt": "2026-08-24T15:51:20.460Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-ve-2",
+    "title": "SFX Folder",
+    "url": "https://drive.google.com/drive/folders/1aI5CyKZvCusgygHC_k1BkKbT1QPKWdrl",
+    "category": "Video Editing",
+    "tags": [
+      "video-editing",
+      "sfx"
+    ],
+    "notes": "Sound effects library folder on Google Drive.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-ve-3",
+    "title": "Video Editing Assets 2.0 (Drive folder)",
+    "url": "https://drive.google.com/drive/folders/12tcYBOSSfSl_za9pNTZqNb3wBpHRObqH",
+    "category": "Video Editing",
+    "tags": [
+      "video-editing",
+      "assets"
+    ],
+    "notes": "Google Drive folder containing video editing assets v2.0.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-ve-4",
+    "title": "Gemini Omni Video Editor (Notion)",
+    "url": "https://cobalt-basilisk-359.notion.site/Gemini-Omni-Video-Editor-1c9f423f325c8247a47001f861cb4780",
+    "category": "Video Editing",
+    "tags": [
+      "video-editing",
+      "ai"
+    ],
+    "notes": "Notion page for Gemini Omni Video Editor.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-dev-1",
+    "title": "500 AI Agents Projects (GitHub)",
+    "url": "https://github.com/ashishpatel26/500-AI-Agents-Projects",
+    "category": "Development",
+    "tags": [
+      "github",
+      "ai-agents"
+    ],
+    "notes": "Curated repository of 500 AI Agent projects and architectures.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-dev-2",
+    "title": "ruflo (GitHub, ruvnet)",
+    "url": "https://github.com/ruvnet/ruflo",
+    "category": "Development",
+    "tags": [
+      "github",
+      "ai"
+    ],
+    "notes": "AI workflow and automation engine repository.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-dev-3",
+    "title": "Neuform.ai",
+    "url": "https://neuform.ai/",
+    "category": "Development",
+    "tags": [
+      "ai-tool"
+    ],
+    "notes": "AI-assisted interface and 3D web generation platform.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-dev-4",
+    "title": "Neuform.ai — WebGL community tag",
+    "url": "https://neuform.ai/community/tag/webgl",
+    "category": "Development",
+    "tags": [
+      "ai-tool",
+      "webgl"
+    ],
+    "notes": "Neuform.ai community showcase tag for WebGL creations.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-dev-5",
+    "title": "Motionsites.ai",
+    "url": "https://motionsites.ai/",
+    "category": "Development",
+    "tags": [
+      "web-design",
+      "templates"
+    ],
+    "notes": "AI motion website design and animated template gallery.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-dev-6",
+    "title": "DesignRocket — Templates",
+    "url": "https://designrocket.io/templates",
+    "category": "Development",
+    "tags": [
+      "web-design",
+      "templates"
+    ],
+    "notes": "Modern web design components and UI template library.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-dev-7",
+    "title": "React Bits — Get Started",
+    "url": "https://reactbits.dev/get-started/index",
+    "category": "Development",
+    "tags": [
+      "react",
+      "ui-components"
+    ],
+    "notes": "Custom React animation and interactive component library.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-dev-8",
+    "title": "GSAP",
+    "url": "https://gsap.com/",
+    "category": "Development",
+    "tags": [
+      "animation",
+      "dev-tool"
+    ],
+    "notes": "GreenSock Animation Platform — high performance web animations.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-cc-1",
+    "title": "Orcalynx Playbook",
+    "url": "https://www.orcalynx.com/playbook/index.html",
+    "category": "Content Creation",
+    "tags": [
+      "playbook"
+    ],
+    "notes": "Orcalynx strategy and content playbook.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-cc-2",
+    "title": "5 Ways to Build a Cult-Like Personal Brand (Notion)",
+    "url": "https://thecontentmentor.notion.site/5-Ways-You-Can-Build-a-Cult-Like-Personal-Brand-3a3425210c9781dd9d30f5929c104bf6",
+    "category": "Content Creation",
+    "tags": [
+      "personal-brand"
+    ],
+    "notes": "Notion guide on personal branding strategies.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-cc-3",
+    "title": "Carousel Claude Prompt (Notion)",
+    "url": "https://ordinary-cub-5d8.notion.site/CAROUSEL-CLAUDE-PROMPT-3385863ab51480bd9bafe1560eebf524",
+    "category": "Content Creation",
+    "tags": [
+      "content-creation",
+      "prompt"
+    ],
+    "notes": "Claude AI prompt for generating social media carousels.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-cc-4",
+    "title": "Beacons.ai — lifewithso (link-in-bio example)",
+    "url": "https://beacons.ai/lifewithso",
+    "category": "Content Creation",
+    "tags": [
+      "link-in-bio",
+      "inspiration"
+    ],
+    "notes": "Beacons.ai link-in-bio layout inspiration.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-cc-5",
+    "title": "Superprofile.bio (link-in-bio example)",
+    "url": "https://superprofile.bio/vp/69dd4262c4cd690013c90ec5",
+    "category": "Content Creation",
+    "tags": [
+      "link-in-bio",
+      "inspiration"
+    ],
+    "notes": "Superprofile link-in-bio example.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-cc-6",
+    "title": "Geekflare",
+    "url": "https://geekflare.com/",
+    "category": "Content Creation",
+    "tags": [
+      "blog",
+      "tools"
+    ],
+    "notes": "Tech articles, API testing, and web tool reviews.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-cat-1",
+    "title": "Aishwarya Chauhan — Roadmap (Drive)",
+    "url": "https://drive.google.com/file/d/1R3uDi8rSdZxWdt5G80TbxWZACJAQSIJx/view",
+    "category": "Career/Roadmaps",
+    "tags": [
+      "roadmap"
+    ],
+    "notes": "Career and learning roadmap document.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-cat-2",
+    "title": "LinkedIn post — Top hackathons (mgraj)",
+    "url": "https://www.linkedin.com/posts/mgraj_top-5-hackathons-for-share-7489547486873817090-w2FN",
+    "category": "Career",
+    "tags": [
+      "linkedin",
+      "hackathons"
+    ],
+    "notes": "LinkedIn post listing top 5 hackathons.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-cat-3",
+    "title": "LinkedIn post — job search/career growth (Shreya Narayan)",
+    "url": "https://www.linkedin.com/posts/shreya-narayan-1536271a4_jobsearch-careergrowth-remotework-share-7490973963981090816-4nRV",
+    "category": "Career",
+    "tags": [
+      "linkedin",
+      "career"
+    ],
+    "notes": "LinkedIn insights on job search and remote career growth.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-nr-1",
+    "title": "Untitled — review link (Doc)",
+    "url": "https://docs.google.com/document/d/1kScmBAdV6yZMstzgyzyaBON8iEI9nnRv1qpKfGs55f4/mobilebasic",
+    "category": "Content Creation",
+    "tags": [
+      "needs-review",
+      "gdocs"
+    ],
+    "notes": "Google Doc — needs review for final title.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-nr-2",
+    "title": "Untitled — review link (Drive File)",
+    "url": "https://drive.google.com/file/d/19ECcc6Hwx9wVYOSbBExL_d2ty8xodfFm/view",
+    "category": "Career/Roadmaps",
+    "tags": [
+      "needs-review",
+      "drive"
+    ],
+    "notes": "Google Drive file — needs review.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-nr-3",
+    "title": "Untitled — review link (Doc)",
+    "url": "https://docs.google.com/document/d/1rBFmDPnfpnaooNiU5SsQoCvIG7h5_sbe7rcVc4H8JCw/mobilebasic",
+    "category": "Development",
+    "tags": [
+      "needs-review",
+      "gdocs"
+    ],
+    "notes": "Google Doc — needs review for final title.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-nr-4",
+    "title": "Untitled — review link (Doc)",
+    "url": "https://docs.google.com/document/d/1SaN4SpexNuLQW_k2gQl3jBplt7Fi8-Sd/mobilebasic",
+    "category": "Development",
+    "tags": [
+      "needs-review",
+      "gdocs"
+    ],
+    "notes": "Google Doc — needs review for final title.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-nr-5",
+    "title": "Untitled — review link (Doc)",
+    "url": "https://docs.google.com/document/d/100zH5nkBic_2EoI6_TyYB2ls-XYYg5pkfai2FL7xzeM/mobilebasic",
+    "category": "Content Creation",
+    "tags": [
+      "needs-review",
+      "gdocs"
+    ],
+    "notes": "Google Doc — needs review for final title.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-nr-6",
+    "title": "Untitled — review link (Doc)",
+    "url": "https://docs.google.com/document/u/0/d/1foF_s2CWQvyLmclrlb0GBb94a03AAujmG8bejZiBRg4/mobilebasic",
+    "category": "Content Creation",
+    "tags": [
+      "needs-review",
+      "gdocs"
+    ],
+    "notes": "Google Doc — needs review for final title.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-nr-7",
+    "title": "Untitled — review link (Drive File)",
+    "url": "https://drive.google.com/file/d/1Dy-ioIICLV36C2K9OEjBk2CyEDEdiN3j/view",
+    "category": "Video Editing",
+    "tags": [
+      "needs-review",
+      "drive"
+    ],
+    "notes": "Google Drive video asset — needs review.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-nr-8",
+    "title": "Untitled — review link (Doc)",
+    "url": "https://docs.google.com/document/d/18vIgwkTymbQHmiY_mq8Gu_gP7qy96LSuIInAP5oNXoE/mobilebasic",
+    "category": "Content Creation",
+    "tags": [
+      "needs-review",
+      "gdocs"
+    ],
+    "notes": "Google Doc — needs review for final title.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-nr-9",
+    "title": "Untitled — review link (Doc)",
+    "url": "https://docs.google.com/document/d/1Jc7IPwoGDQO40kFaw-Nq3TuWJMN9M10Hgwc9Kr8DQYY/mobilebasic",
+    "category": "Content Creation",
+    "tags": [
+      "needs-review",
+      "gdocs"
+    ],
+    "notes": "Google Doc — needs review for final title.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-nr-10",
+    "title": "Untitled — review link (Drive File)",
+    "url": "https://drive.google.com/file/d/1lac7ERASaiyzc0YsyiJMpwyoNiWeUzeh/view",
+    "category": "Video Editing",
+    "tags": [
+      "needs-review",
+      "drive"
+    ],
+    "notes": "Google Drive file — needs review.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-nr-11",
+    "title": "Untitled — review link (Drive File)",
+    "url": "https://drive.google.com/file/d/1DAQ7inrGbsZeevmNpP7SvQtWDBeySWPc/view",
+    "category": "Video Editing",
+    "tags": [
+      "needs-review",
+      "drive"
+    ],
+    "notes": "Google Drive file — needs review.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-nr-12",
+    "title": "Untitled — review link (YouTube)",
+    "url": "https://www.youtube.com/watch?v=brLhhkUqcn4",
+    "category": "Video Editing",
+    "tags": [
+      "needs-review",
+      "youtube"
+    ],
+    "notes": "YouTube video reference — needs review.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-nr-13",
+    "title": "Untitled — review link (YouTube)",
+    "url": "https://www.youtube.com/watch?v=2byPP_9F0-Q",
+    "category": "Video Editing",
+    "tags": [
+      "needs-review",
+      "youtube"
+    ],
+    "notes": "YouTube video reference — needs review.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-nr-14",
+    "title": "Untitled — review link (YouTube)",
+    "url": "https://www.youtube.com/watch?v=pNIYikmYsyw",
+    "category": "Video Editing",
+    "tags": [
+      "needs-review",
+      "youtube"
+    ],
+    "notes": "YouTube video reference — needs review.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-nr-15",
+    "title": "Untitled — review link (YouTube)",
+    "url": "https://www.youtube.com/watch?v=7I50PECz7SU",
+    "category": "Video Editing",
+    "tags": [
+      "needs-review",
+      "youtube"
+    ],
+    "notes": "YouTube video reference — needs review.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-nr-16",
+    "title": "Untitled — review link (Instagram Reel)",
+    "url": "https://www.instagram.com/reel/DSclhisiHWu/",
+    "category": "Content Creation",
+    "tags": [
+      "needs-review",
+      "instagram"
+    ],
+    "notes": "Instagram Reel content — needs review.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  },
+  {
+    "id": "res-nr-17",
+    "title": "Untitled — review link (Instagram Reel)",
+    "url": "https://www.instagram.com/reel/DGYGbtYI3io/",
+    "category": "Content Creation",
+    "tags": [
+      "needs-review",
+      "instagram"
+    ],
+    "notes": "Instagram Reel content — needs review.",
+    "createdAt": "2026-08-24T15:51:20.462Z",
+    "updatedAt": "2026-08-24T15:51:20.462Z"
+  }
+]
