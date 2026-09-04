@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { ViewMode, User, AppTab } from '@/lib/types';
 import {
   Search,
   Plus,
@@ -15,10 +16,13 @@ import {
   LogOut,
   LogIn,
   ChevronDown,
+  Flame,
+  Newspaper,
 } from 'lucide-react';
-import { ViewMode, User } from '@/lib/types';
 
 interface NavbarProps {
+  activeTab: AppTab;
+  setActiveTab: (tab: AppTab) => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   viewMode: ViewMode;
@@ -33,6 +37,8 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
+  activeTab,
+  setActiveTab,
   searchQuery,
   setSearchQuery,
   viewMode,
@@ -100,6 +106,41 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
+          {/* Primary Navigation Tabs */}
+          <div className="flex items-center bg-zinc-900/90 p-1 rounded-xl border border-zinc-800 shrink-0">
+            <button
+              onClick={() => setActiveTab('vault')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === 'vault'
+                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/20'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+              }`}
+            >
+              <Bookmark className="w-3.5 h-3.5" />
+              <span>Vault</span>
+              {totalResources > 0 && (
+                <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] bg-black/30 text-zinc-300 font-mono">
+                  {totalResources}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('news')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === 'news'
+                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/20'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+              }`}
+            >
+              <Flame className={`w-3.5 h-3.5 ${activeTab === 'news' ? 'text-amber-300 fill-amber-300' : 'text-amber-400'}`} />
+              <span>Daily Digest</span>
+              <span className="flex h-1.5 w-1.5 relative ml-0.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
+              </span>
+            </button>
+          </div>
+
           {/* Search Bar (Live & Instant) */}
           <div className="flex-1 max-w-xl mx-2 sm:mx-4">
             <div className="relative group">
@@ -111,7 +152,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search resources by title, category, tags, or notes... (Press '/' to focus)"
+                placeholder={
+                  activeTab === 'vault'
+                    ? "Search resources by title, category, tags, or notes... (Press '/' to focus)"
+                    : "Search articles or switch to Vault... (Press '/' to focus)"
+                }
                 className="w-full pl-10 pr-10 py-2 text-sm bg-zinc-900/90 hover:bg-zinc-900 text-zinc-100 placeholder-zinc-500 rounded-xl border border-zinc-800 focus:outline-none focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 transition-all shadow-inner"
               />
               {searchQuery ? (

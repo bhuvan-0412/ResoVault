@@ -43,3 +43,38 @@ export interface CategoryStat {
   count: number;
 }
 
+export interface NewsArticle {
+  id: string;
+  title: string;
+  link: string;
+  description?: string;
+  pubDate?: string;
+  imageUrl?: string;
+  sourceId?: string;
+  sourceName?: string;
+  sourceIcon?: string;
+  category: string;
+  categories?: string[];
+  keywords?: string[];
+  isBreaking?: boolean;
+  readingTime?: number; // estimated minutes
+  createdAt?: string;
+}
+
+export interface UserTopics {
+  userId: string;
+  topics: string[];
+  customKeywords: string[];
+  updatedAt?: string;
+}
+
+export interface ArticleClick {
+  id: string;
+  userId: string;
+  articleId: string;
+  category?: string;
+  clickedAt: string;
+}
+
+export type AppTab = 'vault' | 'news';
+

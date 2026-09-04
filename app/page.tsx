@@ -12,7 +12,8 @@ import { BulkImportModal } from '@/components/BulkImportModal';
 import { StatsBar } from '@/components/StatsBar';
 import { AuthModal } from '@/components/AuthModal';
 import { MigrationBanner } from '@/components/MigrationBanner';
-import { Resource, ViewMode, SortOption, CategoryStat, User } from '@/lib/types';
+import { NewsDigestTab } from '@/components/NewsDigestTab';
+import { Resource, ViewMode, SortOption, CategoryStat, User, AppTab, NewsArticle } from '@/lib/types';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import {
   fetchResources,
@@ -35,6 +36,7 @@ import {
   ArrowRight,
   Database,
   Key,
+  Flame,
 } from 'lucide-react';
 
 export default function Home() {
@@ -43,6 +45,7 @@ export default function Home() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'signup'>('login');
 
+  const [activeTab, setActiveTab] = useState<AppTab>('vault');
   const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -323,6 +326,31 @@ export default function Home() {
     fetchCategories().then(setUserCategories).catch(console.warn);
   };
 
+  // Save article from News Digest into user's Supabase vault
+  const handleSaveNewsArticleToVault = async (article: NewsArticle) => {
+    if (!user) {
+      setAuthModalMode('login');
+      setIsAuthModalOpen(true);
+      return;
+    }
+
+    try {
+      const saved = await createResource({
+        url: article.link,
+        title: article.title,
+        category: article.category || 'Technology',
+        tags: article.keywords && article.keywords.length > 0 ? article.keywords.slice(0, 3) : ['News', 'Digest'],
+        description: article.description || '',
+        notes: `Saved from Daily News Digest (${article.sourceName || 'News'})`,
+        isPinned: false,
+      });
+      setResources((prev) => [saved, ...prev]);
+      fetchCategories().then(setUserCategories).catch(console.warn);
+    } catch (err) {
+      console.error('Failed to save news article to vault:', err);
+    }
+  };
+
   const deletingResourceTitle = useMemo(() => {
     return resources.find((r) => r.id === deletingId)?.title;
   }, [resources, deletingId]);
@@ -331,6 +359,8 @@ export default function Home() {
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-indigo-500/30 selection:text-indigo-200">
       {/* Top Navigation */}
       <Navbar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         viewMode={viewMode}
@@ -396,8 +426,21 @@ export default function Home() {
           </div>
         )}
 
-        {/* Unauthenticated Landing View */}
-        {!authLoading && !user && (
+        {/* Tab View Switcher Content */}
+        {activeTab === 'news' ? (
+          <NewsDigestTab
+            onSaveToVault={handleSaveNewsArticleToVault}
+            isAuthenticated={Boolean(user)}
+            onRequireAuth={() => {
+              setAuthModalMode('login');
+              setIsAuthModalOpen(true);
+            }}
+            searchQuery={searchQuery}
+          />
+        ) : (
+          <>
+            {/* Unauthenticated Landing View */}
+            {!authLoading && !user && (
           <div className="mb-10 py-12 px-6 sm:px-12 bg-gradient-to-br from-indigo-950/40 via-zinc-900 to-violet-950/40 border border-indigo-500/20 rounded-3xl text-center relative overflow-hidden shadow-2xl">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold mb-4">
               <ShieldCheck className="w-4 h-4" /> Supabase PostgreSQL • Row Level Security • Google Sign-In
@@ -596,6 +639,8 @@ export default function Home() {
             )}
           </div>
         ) : null}
+          </>
+        )}
       </main>
 
       {/* Footer */}
