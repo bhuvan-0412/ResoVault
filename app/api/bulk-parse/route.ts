@@ -37,8 +37,31 @@ function extractUrls(text: string): string[] {
   return cleanedUrls;
 }
 
-// Fetch metadata for a URL with a strict 3s timeout
+// Fetch metadata for a URL with YouTube oEmbed and Open Graph support
 async function fetchUrlMetadata(url: string): Promise<{ url: string; title: string; description: string }> {
+  const lower = url.toLowerCase();
+  if (lower.includes('youtube.com') || lower.includes('youtu.be')) {
+    try {
+      const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const res = await fetch(oembedUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.title) {
+          return {
+            url,
+            title: data.title,
+            description: data.author_name ? `YouTube video by ${data.author_name}` : '',
+          };
+        }
+      }
+    } catch {
+      // Fall through to standard fetch
+    }
+  }
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000);

@@ -1,124 +1,144 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
-import { Resource } from '@/lib/types';
-import { INITIAL_RESOURCES } from '@/lib/utils';
-
-const DATA_DIR = path.join(process.cwd(), 'data');
-const DATA_FILE = path.join(DATA_DIR, 'resources.json');
-
-function ensureDataFile(): Resource[] {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    if (!fs.existsSync(DATA_FILE)) {
-      fs.writeFileSync(DATA_FILE, JSON.stringify(INITIAL_RESOURCES, null, 2), 'utf-8');
-      return INITIAL_RESOURCES;
-    }
-    const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : INITIAL_RESOURCES;
-  } catch (err) {
-    console.error('Error reading resources file:', err);
-    return INITIAL_RESOURCES;
-  }
-}
-
-function saveDataFile(resources: Resource[]) {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    fs.writeFileSync(DATA_FILE, JSON.stringify(resources, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('Error saving resources file:', err);
-  }
-}
+import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { normalizeUrl } from '@/lib/utils';
 
 export async function GET() {
-  const resources = ensureDataFile();
-  return NextResponse.json(resources);
+  try {
+    const supabase = await createServerSupabaseClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized. Please sign in with Google.' }, { status: 401 });
+    }
+
+    const { data, error } = await supabase
+      .from('resources')
+      .select('*')
+      .order('is_pinned', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json(data);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Failed to fetch resources' }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    
-    // Check if replacing entire list (e.g. bulk import / reorder) or adding single resource
-    if (Array.isArray(body)) {
-      saveDataFile(body);
-      return NextResponse.json({ success: true, data: body });
+    const supabase = await createServerSupabaseClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized. Please sign in with Google.' }, { status: 401 });
     }
 
-    const { url, title, category, tags, notes, isPinned } = body;
+    const body = await req.json();
 
+    // Bulk insert
+    if (Array.isArray(body)) {
+      const records = body
+        .filter((item: any) => item && (item.url || item.title))
+        .map((item: any) => ({
+          user_id: user.id,
+          url: normalizeUrl(item.url || ''),
+          title: (item.title || 'Untitled').trim(),
+          description: (item.description || item.notes || '').trim(),
+          category: (item.category || 'General').trim(),
+          tags: Array.isArray(item.tags) ? item.tags : [],
+          is_pinned: Boolean(item.isPinned),
+        }));
+
+      const { data, error } = await supabase.from('resources').insert(records).select();
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      return NextResponse.json({ success: true, count: data.length, data });
+    }
+
+    // Single resource insert
+    const { url, title, category, tags, notes, description, isPinned } = body;
     if (!url || !title) {
       return NextResponse.json({ error: 'URL and Title are required' }, { status: 400 });
     }
 
-    const resources = ensureDataFile();
-    const newResource: Resource = {
-      id: `res-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      url: url.trim(),
-      title: title.trim(),
-      category: (category || 'Uncategorized').trim(),
-      tags: Array.isArray(tags) ? tags.map((t: string) => t.trim()).filter(Boolean) : [],
-      notes: notes ? notes.trim() : '',
-      isPinned: Boolean(isPinned),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    const { data, error } = await supabase
+      .from('resources')
+      .insert({
+        user_id: user.id,
+        url: normalizeUrl(url),
+        title: String(title).trim(),
+        description: String(description || notes || '').trim(),
+        category: category ? String(category).trim() : 'General',
+        tags: Array.isArray(tags) ? tags : [],
+        is_pinned: Boolean(isPinned),
+      })
+      .select()
+      .single();
 
-    const updated = [newResource, ...resources];
-    saveDataFile(updated);
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 
-    return NextResponse.json({ success: true, data: newResource });
-  } catch (error) {
-    console.error('Error in POST /api/resources:', error);
-    return NextResponse.json({ error: 'Failed to save resource' }, { status: 500 });
+    return NextResponse.json({ success: true, data });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Failed to save resource' }, { status: 500 });
   }
 }
 
 export async function PUT(req: Request) {
   try {
+    const supabase = await createServerSupabaseClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized. Please sign in with Google.' }, { status: 401 });
+    }
+
     const body = await req.json();
-    const { id, url, title, category, tags, notes, isPinned } = body;
+    const { id, url, title, category, tags, notes, description, isPinned } = body;
 
     if (!id || !url || !title) {
       return NextResponse.json({ error: 'ID, URL and Title are required' }, { status: 400 });
     }
 
-    const resources = ensureDataFile();
-    const index = resources.findIndex(r => r.id === id);
+    const { data, error } = await supabase
+      .from('resources')
+      .update({
+        url: normalizeUrl(url),
+        title: String(title).trim(),
+        description: String(description || notes || '').trim(),
+        category: category ? String(category).trim() : 'General',
+        tags: Array.isArray(tags) ? tags : [],
+        is_pinned: isPinned !== undefined ? Boolean(isPinned) : false,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
 
-    if (index === -1) {
-      return NextResponse.json({ error: 'Resource not found' }, { status: 404 });
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const updatedResource: Resource = {
-      ...resources[index],
-      url: url.trim(),
-      title: title.trim(),
-      category: (category || 'Uncategorized').trim(),
-      tags: Array.isArray(tags) ? tags.map((t: string) => t.trim()).filter(Boolean) : [],
-      notes: notes !== undefined ? notes.trim() : resources[index].notes,
-      isPinned: isPinned !== undefined ? Boolean(isPinned) : resources[index].isPinned,
-      updatedAt: new Date().toISOString(),
-    };
-
-    resources[index] = updatedResource;
-    saveDataFile(resources);
-
-    return NextResponse.json({ success: true, data: updatedResource });
-  } catch (error) {
-    console.error('Error in PUT /api/resources:', error);
-    return NextResponse.json({ error: 'Failed to update resource' }, { status: 500 });
+    return NextResponse.json({ success: true, data });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Failed to update resource' }, { status: 500 });
   }
 }
 
 export async function DELETE(req: Request) {
   try {
+    const supabase = await createServerSupabaseClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized. Please sign in with Google.' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
 
@@ -126,13 +146,14 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'Resource ID is required' }, { status: 400 });
     }
 
-    const resources = ensureDataFile();
-    const filtered = resources.filter(r => r.id !== id);
-    saveDataFile(filtered);
+    const { error } = await supabase.from('resources').delete().eq('id', id);
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true, id });
-  } catch (error) {
-    console.error('Error in DELETE /api/resources:', error);
-    return NextResponse.json({ error: 'Failed to delete resource' }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Failed to delete resource' }, { status: 500 });
   }
 }

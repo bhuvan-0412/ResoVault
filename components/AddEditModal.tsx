@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Tag as TagIcon, Folder, Link as LinkIcon, FileText, Check, AlertCircle } from 'lucide-react';
+import { X, Plus, Tag as TagIcon, Folder, Link as LinkIcon, FileText, Check, AlertCircle, Sparkles, Loader2 } from 'lucide-react';
 import { Resource } from '@/lib/types';
 import { normalizeUrl, getDomain } from '@/lib/utils';
+import { fetchUrlMetadata } from '@/lib/storage';
 
 interface AddEditModalProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
   const [tags, setTags] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<{ url?: string; title?: string }>({});
+  const [isFetchingMeta, setIsFetchingMeta] = useState(false);
 
   // Populate form when editing or resetting
   useEffect(() => {
@@ -57,16 +59,40 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Auto suggest title from URL if empty
+  // Auto fetch metadata (Open Graph / YouTube oEmbed)
+  const handleAutoFetch = async (targetUrl?: string) => {
+    const raw = targetUrl || url;
+    const normalized = normalizeUrl(raw);
+    if (!normalized || !normalized.includes('.')) return;
+
+    setIsFetchingMeta(true);
+    try {
+      const meta = await fetchUrlMetadata(normalized);
+      if (meta) {
+        if (meta.title && (!title.trim() || targetUrl)) {
+          setTitle(meta.title);
+        }
+        if (meta.description && (!notes.trim() || targetUrl)) {
+          setNotes(meta.description);
+        }
+      } else if (!title.trim()) {
+        const domain = getDomain(raw);
+        if (domain) {
+          const cleanDomain = domain.split('.')[0];
+          setTitle(cleanDomain.charAt(0).toUpperCase() + cleanDomain.slice(1));
+        }
+      }
+    } catch {
+      // Fallback
+    } finally {
+      setIsFetchingMeta(false);
+    }
+  };
+
+  // Auto suggest title from URL on blur
   const handleUrlBlur = () => {
     if (url.trim() && !title.trim()) {
-      const domain = getDomain(url);
-      if (domain) {
-        // Simple human friendly title format based on domain
-        const cleanDomain = domain.split('.')[0];
-        const formattedTitle = cleanDomain.charAt(0).toUpperCase() + cleanDomain.slice(1);
-        setTitle(formattedTitle);
-      }
+      handleAutoFetch();
     }
   };
 
@@ -161,20 +187,56 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
           
           {/* URL Field (Required) */}
           <div>
-            <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
-              URL / Link <span className="text-rose-400">*</span>
-            </label>
-            <input
-              type="text"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              onBlur={handleUrlBlur}
-              placeholder="e.g. https://drive.google.com/drive/folders/... or github.com/user/repo"
-              className={`w-full px-3.5 py-2.5 bg-zinc-950 text-zinc-100 placeholder-zinc-500 text-sm rounded-xl border ${
-                errors.url ? 'border-rose-500/80 focus:ring-rose-500/20' : 'border-zinc-800 focus:border-indigo-500/80 focus:ring-indigo-500/20'
-              } focus:outline-none focus:ring-2 transition-all`}
-              autoFocus
-            />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider">
+                URL / Link <span className="text-rose-400">*</span>
+              </label>
+              {url.trim() && (
+                <button
+                  type="button"
+                  onClick={() => handleAutoFetch()}
+                  disabled={isFetchingMeta}
+                  className="text-xs font-medium text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors disabled:opacity-60"
+                  title="Auto-fetch Title & Notes using Open Graph or YouTube oEmbed"
+                >
+                  {isFetchingMeta ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Fetching info...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Auto-fetch info</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+            <div className="relative">
+              <input
+                type="text"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                onPaste={(e) => {
+                  const pastedText = e.clipboardData.getData('text');
+                  if (pastedText && (!title.trim() || !notes.trim())) {
+                    setTimeout(() => handleAutoFetch(pastedText), 50);
+                  }
+                }}
+                onBlur={handleUrlBlur}
+                placeholder="e.g. https://youtube.com/watch?v=... or github.com/user/repo"
+                className={`w-full px-3.5 py-2.5 bg-zinc-950 text-zinc-100 placeholder-zinc-500 text-sm rounded-xl border ${
+                  errors.url ? 'border-rose-500/80 focus:ring-rose-500/20' : 'border-zinc-800 focus:border-indigo-500/80 focus:ring-indigo-500/20'
+                } focus:outline-none focus:ring-2 transition-all`}
+                autoFocus
+              />
+              {isFetchingMeta && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                </div>
+              )}
+            </div>
             {errors.url && (
               <p className="mt-1 text-xs text-rose-400 flex items-center gap-1">
                 <AlertCircle className="w-3.5 h-3.5" />
