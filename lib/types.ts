@@ -76,5 +76,95 @@ export interface ArticleClick {
   clickedAt: string;
 }
 
-export type AppTab = 'vault' | 'news';
+export type AppTab = 'vault' | 'news' | 'schedule';
+
+export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0 = Sunday, 1 = Monday...
+
+export interface FixedEvent {
+  id: string;
+  userId?: string;
+  title: string;
+  dayOfWeek: DayOfWeek;
+  startTime: string; // "HH:MM"
+  endTime: string;   // "HH:MM"
+  category?: string;
+  createdAt?: string;
+}
+
+export type TodoPriority = 'high' | 'medium' | 'low';
+
+export interface TodoItem {
+  id: string;
+  userId?: string;
+  title: string;
+  dueDate?: string | null;
+  priority: TodoPriority;
+  estimatedDuration: number; // minutes
+  completed: boolean;
+  completedAt?: string | null;
+  category?: string;
+  createdAt?: string;
+}
+
+export type ScheduleBlockType = 'fixed' | 'todo' | 'routine' | 'break' | 'meal';
+
+export interface ScheduleBlock {
+  id: string;
+  title: string;
+  startTime: string; // "HH:MM"
+  endTime: string;   // "HH:MM"
+  type: ScheduleBlockType;
+  category?: string;
+  todoId?: string;
+  priority?: TodoPriority;
+  reason?: string;
+  isCompleted?: boolean;
+  isSkipped?: boolean;
+}
+
+export interface ScheduleConflict {
+  event1: FixedEvent;
+  event2: FixedEvent;
+  overlapMinutes: number;
+  message: string;
+}
+
+export interface SchedulePreferences {
+  wakeTime: string;      // "08:00"
+  sleepTime: string;     // "23:30"
+  peakEnergy: 'morning' | 'afternoon' | 'evening' | 'night';
+  workoutPreference?: string;
+  focusDuration: number; // minutes
+  rawNotes?: string;
+}
+
+export interface GeneratedSchedule {
+  id: string;
+  userId?: string;
+  scheduleDate: string; // "YYYY-MM-DD"
+  blocks: ScheduleBlock[];
+  summary?: string;
+  conflicts?: ScheduleConflict[];
+  createdAt?: string;
+}
+
+export interface ScheduleCompletion {
+  id: string;
+  userId?: string;
+  scheduleId: string;
+  blockId: string;
+  date: string;
+  status: 'completed' | 'skipped' | 'pending';
+  timeSlot?: string;
+  actionAt?: string;
+}
+
+export interface ScheduleStats {
+  streakDays: number;
+  dailyCompletionRate: number; // 0 - 100
+  weeklyCompletionRate: number; // 0 - 100
+  completedBlocksCount: number;
+  totalBlocksCount: number;
+}
+
 

@@ -18,6 +18,8 @@ import {
   ChevronDown,
   Flame,
   Newspaper,
+  Calendar,
+  CalendarClock,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -139,6 +141,20 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
               </span>
             </button>
+            <button
+              onClick={() => setActiveTab('schedule')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === 'schedule'
+                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/20'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+              }`}
+            >
+              <CalendarClock className={`w-3.5 h-3.5 ${activeTab === 'schedule' ? 'text-violet-200' : 'text-violet-400'}`} />
+              <span>Schedule</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                AI
+              </span>
+            </button>
           </div>
 
           {/* Search Bar (Live & Instant) */}
@@ -155,7 +171,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                 placeholder={
                   activeTab === 'vault'
                     ? "Search resources by title, category, tags, or notes... (Press '/' to focus)"
-                    : "Search articles or switch to Vault... (Press '/' to focus)"
+                    : activeTab === 'news'
+                    ? "Search articles or switch to Vault... (Press '/' to focus)"
+                    : "Search schedule, todos, or switch to Vault... (Press '/' to focus)"
                 }
                 className="w-full pl-10 pr-10 py-2 text-sm bg-zinc-900/90 hover:bg-zinc-900 text-zinc-100 placeholder-zinc-500 rounded-xl border border-zinc-800 focus:outline-none focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 transition-all shadow-inner"
               />

@@ -13,6 +13,7 @@ import { StatsBar } from '@/components/StatsBar';
 import { AuthModal } from '@/components/AuthModal';
 import { MigrationBanner } from '@/components/MigrationBanner';
 import { NewsDigestTab } from '@/components/NewsDigestTab';
+import { ScheduleTab } from '@/components/ScheduleTab';
 import { Resource, ViewMode, SortOption, CategoryStat, User, AppTab, NewsArticle } from '@/lib/types';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import {
@@ -436,6 +437,14 @@ export default function Home() {
               setIsAuthModalOpen(true);
             }}
             searchQuery={searchQuery}
+          />
+        ) : activeTab === 'schedule' ? (
+          <ScheduleTab
+            isAuthenticated={Boolean(user)}
+            onRequireAuth={() => {
+              setAuthModalMode('login');
+              setIsAuthModalOpen(true);
+            }}
           />
         ) : (
           <>

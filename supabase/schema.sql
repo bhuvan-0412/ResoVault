@@ -214,3 +214,133 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_new_user();
+
+-- =============================================================================
+-- 14. Schedule & Timetable Module Tables
+-- =============================================================================
+
+-- Table: fixed_events (User recurring commitments like classes, gym, meetings)
+CREATE TABLE IF NOT EXISTS public.fixed_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  day_of_week SMALLINT NOT NULL CHECK (day_of_week BETWEEN 0 AND 6), -- 0 = Sunday, 1 = Monday, ... 6 = Saturday
+  start_time TIME NOT NULL,
+  end_time TIME NOT NULL,
+  category TEXT DEFAULT 'Fixed',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Table: todos (Actionable user tasks with due dates, priority, and durations)
+CREATE TABLE IF NOT EXISTS public.todos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  due_date TIMESTAMPTZ,
+  priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('high', 'medium', 'low')),
+  estimated_duration INTEGER NOT NULL DEFAULT 45, -- in minutes
+  completed BOOLEAN NOT NULL DEFAULT FALSE,
+  completed_at TIMESTAMPTZ,
+  category TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Table: user_schedule_preferences (Free-text notes & parsed habits/chronotype)
+CREATE TABLE IF NOT EXISTS public.user_schedule_preferences (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE UNIQUE,
+  raw_notes TEXT,
+  parsed_preferences JSONB NOT NULL DEFAULT '{"wake_time": "08:00", "sleep_time": "23:30", "peak_energy": "morning", "workout_preference": "evening", "focus_duration": 45}'::jsonb,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Table: generated_schedules (ML-generated daily plan output per date)
+CREATE TABLE IF NOT EXISTS public.generated_schedules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  schedule_date DATE NOT NULL,
+  blocks JSONB NOT NULL DEFAULT '[]'::jsonb,
+  summary TEXT,
+  conflicts JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT unique_user_date_schedule UNIQUE (user_id, schedule_date)
+);
+
+-- Table: schedule_completions (Tracks completed & skipped blocks for feedback loop)
+CREATE TABLE IF NOT EXISTS public.schedule_completions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  schedule_id UUID REFERENCES public.generated_schedules(id) ON DELETE CASCADE,
+  block_id TEXT NOT NULL,
+  date DATE NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('completed', 'skipped', 'pending')),
+  time_slot TEXT,
+  action_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT unique_schedule_block_completion UNIQUE (schedule_id, block_id)
+);
+
+-- Indexes for Schedule module
+CREATE INDEX IF NOT EXISTS idx_fixed_events_user_day ON public.fixed_events(user_id, day_of_week);
+CREATE INDEX IF NOT EXISTS idx_todos_user_completed ON public.todos(user_id, completed, due_date);
+CREATE INDEX IF NOT EXISTS idx_schedules_user_date ON public.generated_schedules(user_id, schedule_date DESC);
+CREATE INDEX IF NOT EXISTS idx_completions_user_date ON public.schedule_completions(user_id, date DESC);
+
+-- Enable Row Level Security (RLS)
+ALTER TABLE public.fixed_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.todos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_schedule_preferences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.generated_schedules ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.schedule_completions ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies: fixed_events (Private per user)
+DROP POLICY IF EXISTS "Users can manage their own fixed events" ON public.fixed_events;
+CREATE POLICY "Users can manage their own fixed events"
+  ON public.fixed_events
+  FOR ALL
+  TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- RLS Policies: todos (Private per user)
+DROP POLICY IF EXISTS "Users can manage their own todos" ON public.todos;
+CREATE POLICY "Users can manage their own todos"
+  ON public.todos
+  FOR ALL
+  TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- RLS Policies: user_schedule_preferences (Private per user)
+DROP POLICY IF EXISTS "Users can manage their own schedule preferences" ON public.user_schedule_preferences;
+CREATE POLICY "Users can manage their own schedule preferences"
+  ON public.user_schedule_preferences
+  FOR ALL
+  TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- RLS Policies: generated_schedules (Private per user)
+DROP POLICY IF EXISTS "Users can view their own generated schedules" ON public.generated_schedules;
+CREATE POLICY "Users can view their own generated schedules"
+  ON public.generated_schedules
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can manage their own generated schedules" ON public.generated_schedules;
+CREATE POLICY "Users can manage their own generated schedules"
+  ON public.generated_schedules
+  FOR ALL
+  TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- RLS Policies: schedule_completions (Private per user)
+DROP POLICY IF EXISTS "Users can manage their own schedule completions" ON public.schedule_completions;
+CREATE POLICY "Users can manage their own schedule completions"
+  ON public.schedule_completions
+  FOR ALL
+  TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+

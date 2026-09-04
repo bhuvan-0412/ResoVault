@@ -34,13 +34,26 @@
 - **Engagement-Weighted Scoring**: Analyzes your past 30-day click logs to continuously rank topics you actually interact with higher in future digests.
 - **Instant "Save to Vault"**: Convert any interesting article from your daily digest directly into a permanent link in your personal vault.
 
-### 3. 🛡️ Enterprise-Grade Security & RLS
+### 3. 🗓️ ML-Generated Personalized Timetable & Smart Schedule
+- **Conflict-Aware Schedule Engine**: Automatically detects overlapping commitments (e.g., conflicting classes or meetings) and warns you before generation.
+- **Deadline Reverse-Planning**: Prioritizes upcoming deadlines and reverse-plans focused study/work blocks backward from due dates into available free-time slots.
+- **Natural Language Habit & Preference Parser**: Simply type *"I like working out in the evenings around 7pm, and I'm a night owl"* — an LLM parses it into recurring commitments and peak energy preferences.
+- **Adaptive Completion Feedback Loop**: Every block marked as *Done* or *Skipped* is logged into `schedule_completions`. Past completion trends are fed back into future timetable generation (e.g., if you consistently skip early-morning blocks, the engine shifts demanding focus to later hours).
+- **Streak & Consistency Gamification**: Real-time daily completion percentage meters, 7-day consistency scores, and a persistent streak counter (days with ≥ 70% completion).
+- **Scheduled & On-Demand Generation**: Early morning automated cron pre-generation (`/api/cron/generate-schedules`) plus a 1-click manual "Regenerate" button.
+
+### 4. 🛡️ Enterprise-Grade Security & RLS
 - **Google OAuth Authentication**: Secure authentication via Supabase Auth with Google provider.
 - **Row Level Security (RLS)**: Enforced directly at the PostgreSQL database level:
   - `resources` & `categories`: Private per user (`auth.uid() = user_id`).
-  - `user_topics`: Private per user (`auth.uid() = user_id`).
-  - `user_article_clicks`: Private per user (`auth.uid() = user_id`).
-  - `news_articles`: Shared read-only for authenticated users (`USING (true)`). Writes are locked exclusively to the server-side cron worker via the `SUPABASE_SERVICE_ROLE_KEY`.
+  - `fixed_events`: Recurring commitments private per user (`auth.uid() = user_id`).
+  - `todos`: Action items and deadlines private per user (`auth.uid() = user_id`).
+  - `generated_schedules`: Timetable outputs private per user (`auth.uid() = user_id`).
+  - `schedule_completions`: Completion logs private per user (`auth.uid() = user_id`).
+  - `user_schedule_preferences`: Energy & chronotype settings private per user (`auth.uid() = user_id`).
+  - `user_topics` & `user_article_clicks`: Private per user (`auth.uid() = user_id`).
+  - `news_articles`: Shared read-only for authenticated users (`USING (true)`). Writes locked to `service_role` key.
+- **Zero Client-Side LLM Key Exposure**: LLM API keys (`GEMINI_API_KEY`, `OPENAI_API_KEY`) and `SUPABASE_SERVICE_ROLE_KEY` are strictly server-side and never sent to the browser. Fallback heuristic algorithms guarantee zero-downtime execution even when external AI quotas expire.
 
 ---
 
@@ -64,6 +77,11 @@ Run [supabase/schema.sql](supabase/schema.sql) in your [Supabase SQL Editor](htt
 | :--- | :--- | :--- |
 | **`public.resources`** | User links, tags, categories, and notes | Private (`auth.uid() = user_id`) for SELECT, INSERT, UPDATE, DELETE |
 | **`public.categories`** | User folder categories | Private (`auth.uid() = user_id`) for SELECT, INSERT, DELETE |
+| **`public.fixed_events`** | User recurring commitments (classes, gym, work) | Private (`auth.uid() = user_id`) for SELECT, INSERT, UPDATE, DELETE |
+| **`public.todos`** | User tasks with due dates, priority, duration | Private (`auth.uid() = user_id`) for SELECT, INSERT, UPDATE, DELETE |
+| **`public.generated_schedules`** | ML-generated daily plans per date | Private (`auth.uid() = user_id`) for SELECT, INSERT, UPDATE, DELETE |
+| **`public.schedule_completions`** | Block completion & skip logs for adaptive feedback | Private (`auth.uid() = user_id`) for SELECT, INSERT, UPDATE, DELETE |
+| **`public.user_schedule_preferences`** | Chronotype, wake/sleep hours, energy preferences | Private (`auth.uid() = user_id`) for SELECT, INSERT, UPDATE, DELETE |
 | **`public.news_articles`** | Shared ingested news feed cache | Shared read-only for users (`USING (true)`). Writes locked to `service_role` key |
 | **`public.user_topics`** | User domain & custom keyword preferences | Private (`auth.uid() = user_id`) for SELECT, INSERT, UPDATE, DELETE |
 | **`public.user_article_clicks`** | User click logs for digest engagement weighting | Private (`auth.uid() = user_id`) for SELECT, INSERT. UPDATE/DELETE disallowed |
