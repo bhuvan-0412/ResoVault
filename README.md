@@ -1,25 +1,102 @@
-# ResoVault — Personal Link Engine & Resource Hub
+# ResoVault — Cross-Device Resource Vault & Curated Daily News Hub
 
-**ResoVault** is a fast, minimal, mobile-friendly personal Resource Hub web application built to save, organize, search, and manage links (Google Drive folders, GitHub repos, Google Docs, articles, or any URL).
+[![Live App](https://img.shields.io/badge/Production-Live%20on%20Vercel-success?style=for-the-badge&logo=vercel)](https://resovault.vercel.app)
+[![Next.js](https://img.shields.io/badge/Next.js%2016-Turbopack-black?style=for-the-badge&logo=next.js)](https://nextjs.org)
+[![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL%20%2B%20Auth-3ECF8E?style=for-the-badge&logo=supabase)](https://supabase.com)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org)
+
+**ResoVault** is a modern, fast, cross-device personal link engine and personalized news hub. Save links on your laptop, access them instantly on your phone, and stay informed with an engagement-weighted daily news digest curated to your exact interests.
 
 ---
 
-## ⚡ Features
+## 🌐 Live Production Links
 
-- **Instant Live Search**: Search across Title, Category, Tags, and Notes with zero page reload. Press `/` anywhere to focus search.
-- **Visual Folder Cards**: Browse resources grouped by category with live resource count badges.
-- **⚡ AI-Powered Bulk Import**: Paste raw unstructured chat text (WhatsApp, Slack, emails) to automatically extract links, scrape metadata, and assign categories & tags. Includes duplicate URL detection.
-- **On-The-Fly Categories**: Select an existing category or create a custom new category dynamically.
-- **Free-Text Tag Chips**: Interactive multi-tag builder with tag suggestions.
-- **Smart Domain Detection**: Auto-detects logos & favicons for GitHub, Google Drive, Google Docs, YouTube, Figma, Notion, etc.
-- **Grid & List Views**: Toggle between visual card grid layout and dense list row view.
-- **1-Click Backup & Restore**: Export all your resources to a JSON file or import saved backups anytime.
+* **Live Web App**: [https://resovault.vercel.app](https://resovault.vercel.app)
+* **GitHub Repository**: [https://github.com/bhuvan-0412/ResoVault](https://github.com/bhuvan-0412/ResoVault)
+
+---
+
+## ⚡ Core Features
+
+### 1. 🗄️ Cross-Device Personal Link Vault
+- **Multi-Device Cloud Sync**: Backed by Supabase PostgreSQL — every link, category, and tag is tied to your Google account and accessible anywhere.
+- **Instant Search**: Live search across title, description, category, tags, and notes with zero reload. Press `/` anywhere to focus search.
+- **Visual Folder Cards & List Views**: Toggle between interactive folder cards and dense list rows.
+- **Auto-Metadata Extraction**: Automatic scraping of YouTube oEmbed titles/thumbnails and Open Graph metadata for saved links.
+- **AI Bulk Import**: Paste raw unstructured chat messages (WhatsApp, Slack, emails) to automatically extract links, scrape metadata, and assign categories.
+- **1-Click Backup & Migration**: Export/import JSON backups and migrate legacy browser local storage into your Supabase cloud account with one click.
+
+### 2. 📰 Personalized News Feed & Daily Digest
+- **NewsData.io Ingestion**: Server-side scheduled job ingests fresh stories without exposing API keys to the browser.
+- **Curated Digest (Not Infinite Scroll)**: Delivers a clean, focused daily digest of top 10–15 articles with estimated reading times and publisher source icons.
+- **High-Signal Breaking News Section**: Detects urgent alerts (`zero-day`, `critical`, `breaking`, `announces`, `launches`) and displays them in a distinct banner with radar pulse badges.
+- **Interactive Topic Customizer**: Pick domains (*Technology*, *AI & Machine Learning*, *Development*, *Product Management*, *Design*, *Cybersecurity*, *Startups*, etc.) and add custom focus keywords (e.g., `nextjs`, `supabase`, `transformers`).
+- **Engagement-Weighted Scoring**: Analyzes your past 30-day click logs to continuously rank topics you actually interact with higher in future digests.
+- **Instant "Save to Vault"**: Convert any interesting article from your daily digest directly into a permanent link in your personal vault.
+
+### 3. 🛡️ Enterprise-Grade Security & RLS
+- **Google OAuth Authentication**: Secure authentication via Supabase Auth with Google provider.
+- **Row Level Security (RLS)**: Enforced directly at the PostgreSQL database level:
+  - `resources` & `categories`: Private per user (`auth.uid() = user_id`).
+  - `user_topics`: Private per user (`auth.uid() = user_id`).
+  - `user_article_clicks`: Private per user (`auth.uid() = user_id`).
+  - `news_articles`: Shared read-only for authenticated users (`USING (true)`). Writes are locked exclusively to the server-side cron worker via the `SUPABASE_SERVICE_ROLE_KEY`.
+
+---
+
+## 🛠️ Architecture & Tech Stack
+
+* **Framework**: [Next.js 16](https://nextjs.org/) (App Router, Turbopack)
+* **Language**: [TypeScript](https://www.typescriptlang.org/)
+* **Database & Auth**: [Supabase](https://supabase.com/) (PostgreSQL + Auth + Row Level Security)
+* **Styling**: [Tailwind CSS](https://tailwindcss.com/)
+* **Icons**: [Lucide React](https://lucide.dev/)
+* **News API**: [NewsData.io](https://newsdata.io/)
+* **Deployment & Cron**: [Vercel](https://vercel.com/) (Vercel Cron Jobs)
+
+---
+
+## 🗃️ Database Schema
+
+Run [supabase/schema.sql](supabase/schema.sql) in your [Supabase SQL Editor](https://supabase.com/dashboard/project/_/sql/new) to set up all tables and security policies:
+
+| Table | Purpose | Security Policy (RLS) |
+| :--- | :--- | :--- |
+| **`public.resources`** | User links, tags, categories, and notes | Private (`auth.uid() = user_id`) for SELECT, INSERT, UPDATE, DELETE |
+| **`public.categories`** | User folder categories | Private (`auth.uid() = user_id`) for SELECT, INSERT, DELETE |
+| **`public.news_articles`** | Shared ingested news feed cache | Shared read-only for users (`USING (true)`). Writes locked to `service_role` key |
+| **`public.user_topics`** | User domain & custom keyword preferences | Private (`auth.uid() = user_id`) for SELECT, INSERT, UPDATE, DELETE |
+| **`public.user_article_clicks`** | User click logs for digest engagement weighting | Private (`auth.uid() = user_id`) for SELECT, INSERT. UPDATE/DELETE disallowed |
+
+---
+
+## 🔑 Environment Variables
+
+Copy `.env.example` to `.env.local` and populate the values:
+
+```bash
+cp .env.example .env.local
+```
+
+| Variable | Required | Description |
+| :--- | :---: | :--- |
+| `NEXT_PUBLIC_SUPABASE_URL` | **Yes** | Your Supabase project URL (`https://xyz.supabase.co`) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **Yes** | Your Supabase public anonymous API key |
+| `SUPABASE_SERVICE_ROLE_KEY` | **Yes** | Your Supabase secret service role key (Server-only, bypasses RLS for cron ingest) |
+| `NEWSDATA_API_KEY` | **Yes** | NewsData.io API key for news ingestion (Register free at [newsdata.io](https://newsdata.io)) |
+| `CRON_SECRET` | Optional | Bearer token to protect `/api/cron/fetch-news` from unauthorized external hits |
+| `GEMINI_API_KEY` | Optional | AI provider key for AI bulk text parser (Claude or OpenAI keys also supported) |
 
 ---
 
 ## 🚀 Getting Started
 
-### Local Setup
+### Prerequisites
+- Node.js 18+ installed
+- A free [Supabase](https://supabase.com) account
+- A free [NewsData.io](https://newsdata.io) account
+
+### Local Development
 
 1. **Clone the repository**:
    ```bash
@@ -32,20 +109,39 @@
    npm install
    ```
 
-3. **Run the local development server**:
+3. **Set up environment variables**:
+   Create `.env.local` using the table above or copy from `.env.example`.
+
+4. **Initialize Database**:
+   Copy and run [supabase/schema.sql](supabase/schema.sql) in your [Supabase SQL Editor](https://supabase.com/dashboard/project/_/sql/new).
+
+5. **Start development server**:
    ```bash
    npm run dev
    ```
-
-4. **Open in browser**:
-   Navigate to [`http://localhost:3000`](http://localhost:3000).
+   Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
 ## 🌐 Deploy to Vercel
 
-To access ResoVault from your phone or computer anywhere:
+1. Push your code to GitHub.
+2. Import the repository in [Vercel](https://vercel.com/new).
+3. In **Settings -> Environment Variables**, add:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `NEWSDATA_API_KEY`
+   - `CRON_SECRET`
+4. Click **Deploy**.
+5. In your [Supabase Dashboard -> Auth -> URL Configuration](https://supabase.com/dashboard/project/_/auth/url-configuration), add your production redirect URL:
+   ```
+   https://resovault.vercel.app/auth/callback
+   ```
+6. The scheduled cron job in [vercel.json](vercel.json) will automatically run daily at `0 6 * * *` to ingest fresh news!
 
-1. Import your GitHub repository `https://github.com/bhuvan-0412/ResoVault.git` at [vercel.com/new](https://vercel.com/new).
-2. Click **Deploy**.
-3. (Optional) Set `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY` in Vercel Environment Variables for AI Bulk Import enhancements.
+---
+
+## 📄 License
+
+MIT License. Free for personal and commercial use.
