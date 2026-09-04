@@ -117,46 +117,70 @@ CREATE POLICY "Users can delete their own categories"
   USING (auth.uid() = user_id);
 
 -- 10. Row Level Security Policies for news_articles
--- All authenticated users can read news articles
-CREATE POLICY "Anyone authenticated can view news articles"
+-- Shared read-only content: Any authenticated user can read all rows
+DROP POLICY IF EXISTS "Anyone authenticated can view news articles" ON public.news_articles;
+DROP POLICY IF EXISTS "Authenticated users can read news articles" ON public.news_articles;
+DROP POLICY IF EXISTS "Service role can manage news articles" ON public.news_articles;
+
+CREATE POLICY "Authenticated users can read news articles"
   ON public.news_articles
   FOR SELECT
+  TO authenticated
   USING (true);
 
--- Insert/Update/Delete restricted to service_role or server-side cron
-CREATE POLICY "Service role can manage news articles"
-  ON public.news_articles
-  FOR ALL
-  USING (auth.jwt()->>'role' = 'service_role' OR auth.role() = 'authenticated')
-  WITH CHECK (auth.jwt()->>'role' = 'service_role' OR auth.role() = 'authenticated');
+-- NOTE: No INSERT, UPDATE, or DELETE policies exist for regular users.
+-- PostgreSQL RLS defaults to DENY for all writes. Only the server-side scheduled
+-- cron job using the Supabase Service Role Key (which bypasses RLS) can write to this table.
 
--- 11. Row Level Security Policies for user_topics
+-- 11. Row Level Security Policies for user_topics (private per user)
+DROP POLICY IF EXISTS "Users can view their own topics" ON public.user_topics;
+DROP POLICY IF EXISTS "Users can insert their own topics" ON public.user_topics;
+DROP POLICY IF EXISTS "Users can update their own topics" ON public.user_topics;
+DROP POLICY IF EXISTS "Users can delete their own topics" ON public.user_topics;
+
 CREATE POLICY "Users can view their own topics"
   ON public.user_topics
   FOR SELECT
+  TO authenticated
   USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can insert their own topics"
   ON public.user_topics
   FOR INSERT
+  TO authenticated
   WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can update their own topics"
   ON public.user_topics
   FOR UPDATE
+  TO authenticated
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
--- 12. Row Level Security Policies for user_article_clicks
+CREATE POLICY "Users can delete their own topics"
+  ON public.user_topics
+  FOR DELETE
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+-- 12. Row Level Security Policies for user_article_clicks (private click tracking log)
+DROP POLICY IF EXISTS "Users can view their own article clicks" ON public.user_article_clicks;
+DROP POLICY IF EXISTS "Users can insert their own article clicks" ON public.user_article_clicks;
+
 CREATE POLICY "Users can view their own article clicks"
   ON public.user_article_clicks
   FOR SELECT
+  TO authenticated
   USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can insert their own article clicks"
   ON public.user_article_clicks
   FOR INSERT
+  TO authenticated
   WITH CHECK (auth.uid() = user_id);
+
+-- NOTE: UPDATE and DELETE policies are intentionally omitted so click history
+-- cannot be tampered with or deleted by users.
 
 -- 13. Trigger to auto-seed default categories & topics on new user signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()

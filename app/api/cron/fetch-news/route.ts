@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createServiceRoleSupabaseClient } from '@/lib/supabase/server';
 
 // High-signal keywords that flag an article as "Breaking" or High Priority
 const BREAKING_KEYWORDS = [
@@ -147,7 +147,7 @@ export async function GET(req: Request) {
     }
 
     const apiKey = process.env.NEWSDATA_API_KEY;
-    const supabase = await createServerSupabaseClient();
+    const supabase = createServiceRoleSupabaseClient();
 
     let articlesToInsert: any[] = [];
 
