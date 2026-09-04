@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createServerSupabaseClient, createServiceRoleSupabaseClient } from '@/lib/supabase/server';
 import { DEFAULT_USER_TOPICS } from '../topics/route';
 import { NewsArticle } from '@/lib/types';
 
@@ -73,7 +73,10 @@ export async function GET(req: Request) {
     }
 
     // 3. Fetch recent articles from Supabase news_articles table
-    let { data: rawArticles, error } = await supabase
+    // Authenticated users query with their session (RLS enforced).
+    // Unauthenticated visitors preview the public shared news feed.
+    const newsReader = user ? supabase : createServiceRoleSupabaseClient();
+    let { data: rawArticles, error } = await newsReader
       .from('news_articles')
       .select('*')
       .order('pub_date', { ascending: false })
