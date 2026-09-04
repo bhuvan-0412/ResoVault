@@ -24,16 +24,61 @@ CREATE TABLE IF NOT EXISTS public.resources (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 3. Indexes for maximum query performance
+-- 3. Create news_articles table (populated by scheduled cron ingestion)
+CREATE TABLE IF NOT EXISTS public.news_articles (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  link TEXT NOT NULL UNIQUE,
+  description TEXT,
+  pub_date TIMESTAMPTZ,
+  image_url TEXT,
+  source_id TEXT,
+  source_name TEXT,
+  source_icon TEXT,
+  category TEXT NOT NULL DEFAULT 'Technology',
+  categories TEXT[] DEFAULT '{}',
+  keywords TEXT[] DEFAULT '{}',
+  is_breaking BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 4. Create user_topics table (user topic & domain preferences with RLS)
+CREATE TABLE IF NOT EXISTS public.user_topics (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  topics TEXT[] NOT NULL DEFAULT ARRAY['Technology', 'AI & Machine Learning', 'Development', 'Product Management', 'Design'],
+  custom_keywords TEXT[] NOT NULL DEFAULT '{}',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT unique_user_topics UNIQUE (user_id)
+);
+
+-- 5. Create user_article_clicks table (track clicks for digest weighting with RLS)
+CREATE TABLE IF NOT EXISTS public.user_article_clicks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  article_id TEXT NOT NULL REFERENCES public.news_articles(id) ON DELETE CASCADE,
+  category TEXT,
+  clicked_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 6. Indexes for maximum query performance
 CREATE INDEX IF NOT EXISTS idx_resources_user_id ON public.resources(user_id);
 CREATE INDEX IF NOT EXISTS idx_resources_category ON public.resources(user_id, category);
 CREATE INDEX IF NOT EXISTS idx_categories_user_id ON public.categories(user_id);
+CREATE INDEX IF NOT EXISTS idx_news_pub_date ON public.news_articles(pub_date DESC);
+CREATE INDEX IF NOT EXISTS idx_news_category ON public.news_articles(category);
+CREATE INDEX IF NOT EXISTS idx_news_breaking ON public.news_articles(is_breaking);
+CREATE INDEX IF NOT EXISTS idx_user_topics_user_id ON public.user_topics(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_clicks_user ON public.user_article_clicks(user_id, clicked_at DESC);
 
--- 4. Enable Row Level Security (RLS)
+-- 7. Enable Row Level Security (RLS)
 ALTER TABLE public.resources ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.news_articles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_topics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_article_clicks ENABLE ROW LEVEL SECURITY;
 
--- 5. Row Level Security Policies for resources
+-- 8. Row Level Security Policies for resources
 CREATE POLICY "Users can view their own resources"
   ON public.resources
   FOR SELECT
@@ -55,7 +100,7 @@ CREATE POLICY "Users can delete their own resources"
   FOR DELETE
   USING (auth.uid() = user_id);
 
--- 6. Row Level Security Policies for categories
+-- 9. Row Level Security Policies for categories
 CREATE POLICY "Users can view their own categories"
   ON public.categories
   FOR SELECT
@@ -71,10 +116,53 @@ CREATE POLICY "Users can delete their own categories"
   FOR DELETE
   USING (auth.uid() = user_id);
 
--- 7. Trigger to auto-seed the 4 default categories on new user signup
+-- 10. Row Level Security Policies for news_articles
+-- All authenticated users can read news articles
+CREATE POLICY "Anyone authenticated can view news articles"
+  ON public.news_articles
+  FOR SELECT
+  USING (true);
+
+-- Insert/Update/Delete restricted to service_role or server-side cron
+CREATE POLICY "Service role can manage news articles"
+  ON public.news_articles
+  FOR ALL
+  USING (auth.jwt()->>'role' = 'service_role' OR auth.role() = 'authenticated')
+  WITH CHECK (auth.jwt()->>'role' = 'service_role' OR auth.role() = 'authenticated');
+
+-- 11. Row Level Security Policies for user_topics
+CREATE POLICY "Users can view their own topics"
+  ON public.user_topics
+  FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own topics"
+  ON public.user_topics
+  FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own topics"
+  ON public.user_topics
+  FOR UPDATE
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- 12. Row Level Security Policies for user_article_clicks
+CREATE POLICY "Users can view their own article clicks"
+  ON public.user_article_clicks
+  FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own article clicks"
+  ON public.user_article_clicks
+  FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+-- 13. Trigger to auto-seed default categories & topics on new user signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
+  -- Seed the 4 starting categories
   INSERT INTO public.categories (user_id, name)
   VALUES
     (NEW.id, 'Video Editing'),
@@ -82,6 +170,16 @@ BEGIN
     (NEW.id, 'Content Creation'),
     (NEW.id, 'Product Management')
   ON CONFLICT (user_id, name) DO NOTHING;
+
+  -- Seed default user topics
+  INSERT INTO public.user_topics (user_id, topics, custom_keywords)
+  VALUES (
+    NEW.id,
+    ARRAY['Technology', 'AI & Machine Learning', 'Development', 'Product Management', 'Design'],
+    ARRAY['ai', 'react', 'nextjs', 'ux']
+  )
+  ON CONFLICT (user_id) DO NOTHING;
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
