@@ -68,6 +68,16 @@ export default function Home() {
     let mounted = true;
     const supabase = createClient();
 
+    // Actively purge legacy localStorage keys so stale client data never persists
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('resource_hub_data_v1');
+        localStorage.removeItem('resource_hub_migrated_to_db');
+      } catch {
+        // Ignore in restricted storage environments
+      }
+    }
+
     const getInitialSession = async () => {
       try {
         setAuthLoading(true);
