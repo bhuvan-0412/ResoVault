@@ -20,9 +20,15 @@ CREATE TABLE IF NOT EXISTS public.resources (
   category TEXT NOT NULL,
   tags TEXT[] DEFAULT '{}',
   is_pinned BOOLEAN NOT NULL DEFAULT FALSE,
+  click_count INTEGER NOT NULL DEFAULT 0,
+  last_opened_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Migration support for existing deployments
+ALTER TABLE public.resources ADD COLUMN IF NOT EXISTS click_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE public.resources ADD COLUMN IF NOT EXISTS last_opened_at TIMESTAMPTZ;
 
 -- 3. Create news_articles table (populated by scheduled cron ingestion)
 CREATE TABLE IF NOT EXISTS public.news_articles (

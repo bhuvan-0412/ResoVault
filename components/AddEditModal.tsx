@@ -75,15 +75,29 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
         if (meta.description && (!notes.trim() || targetUrl)) {
           setNotes(meta.description);
         }
+        // Handle failure / generic title gracefully
+        if (!meta.isSpecificTitle) {
+          setTags((prev) => (prev.includes('needs-review') ? prev : [...prev, 'needs-review']));
+        } else {
+          setTags((prev) => prev.filter((t) => t !== 'needs-review'));
+        }
       } else if (!title.trim()) {
         const domain = getDomain(raw);
         if (domain) {
           const cleanDomain = domain.split('.')[0];
           setTitle(cleanDomain.charAt(0).toUpperCase() + cleanDomain.slice(1));
+          setTags((prev) => (prev.includes('needs-review') ? prev : [...prev, 'needs-review']));
         }
       }
     } catch {
-      // Fallback
+      if (!title.trim()) {
+        const domain = getDomain(raw);
+        if (domain) {
+          const cleanDomain = domain.split('.')[0];
+          setTitle(cleanDomain.charAt(0).toUpperCase() + cleanDomain.slice(1));
+          setTags((prev) => (prev.includes('needs-review') ? prev : [...prev, 'needs-review']));
+        }
+      }
     } finally {
       setIsFetchingMeta(false);
     }
@@ -116,7 +130,7 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
     setTags(tags.filter((t) => t !== tagToRemove));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const newErrors: { url?: string; title?: string } = {};
@@ -124,15 +138,38 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
     const normalized = normalizeUrl(url);
     if (!normalized) {
       newErrors.url = 'URL is required';
-    }
-
-    if (!title.trim()) {
-      newErrors.title = 'Title is required';
-    }
-
-    if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
+    }
+
+    let finalTitle = title.trim();
+    let currentTags = [...tags];
+
+    // If title is missing, automatically extract it instead of requiring manual entry
+    if (!finalTitle) {
+      setIsFetchingMeta(true);
+      try {
+        const meta = await fetchUrlMetadata(normalized);
+        if (meta && meta.title) {
+          finalTitle = meta.title.trim();
+          if (!meta.isSpecificTitle) {
+            if (!currentTags.includes('needs-review')) currentTags.push('needs-review');
+          } else {
+            currentTags = currentTags.filter((t) => t !== 'needs-review');
+          }
+        }
+      } catch {
+        // ignore
+      } finally {
+        setIsFetchingMeta(false);
+      }
+
+      if (!finalTitle) {
+        const domain = getDomain(normalized);
+        const cleanDomain = domain.split('.')[0] || 'Resource';
+        finalTitle = cleanDomain.charAt(0).toUpperCase() + cleanDomain.slice(1);
+        if (!currentTags.includes('needs-review')) currentTags.push('needs-review');
+      }
     }
 
     const finalCategory = isCreatingNewCategory
@@ -143,16 +180,16 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
       ? {
           ...editingResource,
           url: normalized,
-          title: title.trim(),
+          title: finalTitle,
           category: finalCategory,
-          tags,
+          tags: currentTags,
           notes: notes.trim(),
         }
       : {
           url: normalized,
-          title: title.trim(),
+          title: finalTitle,
           category: finalCategory,
-          tags,
+          tags: currentTags,
           notes: notes.trim(),
         };
 
@@ -245,26 +282,26 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
             )}
           </div>
 
-          {/* Title Field (Required) */}
+          {/* Title Field (Auto-extracted or custom) */}
           <div>
-            <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
-              Title <span className="text-rose-400">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider">
+                Title <span className="text-zinc-500 font-normal lowercase">(auto-extracted if left blank)</span>
+              </label>
+              {isFetchingMeta && (
+                <span className="text-xs text-indigo-400 flex items-center gap-1">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Auto-extracting...
+                </span>
+              )}
+            </div>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Q3 Design Assets Drive"
-              className={`w-full px-3.5 py-2.5 bg-zinc-950 text-zinc-100 placeholder-zinc-500 text-sm rounded-xl border ${
-                errors.title ? 'border-rose-500/80 focus:ring-rose-500/20' : 'border-zinc-800 focus:border-indigo-500/80 focus:ring-indigo-500/20'
-              } focus:outline-none focus:ring-2 transition-all`}
+              placeholder="Leave blank to auto-fetch, or enter custom title"
+              className="w-full px-3.5 py-2.5 bg-zinc-950 text-zinc-100 placeholder-zinc-500 text-sm rounded-xl border border-zinc-800 focus:border-indigo-500/80 focus:ring-indigo-500/20 focus:outline-none focus:ring-2 transition-all"
             />
-            {errors.title && (
-              <p className="mt-1 text-xs text-rose-400 flex items-center gap-1">
-                <AlertCircle className="w-3.5 h-3.5" />
-                {errors.title}
-              </p>
-            )}
           </div>
 
           {/* Category Selector (Existing Dropdown OR Dynamic Custom Category on the fly) */}

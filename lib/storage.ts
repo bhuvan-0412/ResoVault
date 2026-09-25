@@ -20,6 +20,8 @@ function mapSupabaseRow(row: any): Resource {
     description: row.description || '',
     notes: row.description || '',
     isPinned: Boolean(row.is_pinned),
+    clickCount: typeof row.click_count === 'number' ? row.click_count : 0,
+    lastOpenedAt: row.last_opened_at || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -45,7 +47,89 @@ export async function fetchResources(): Promise<Resource[]> {
     return [];
   }
 
-  return (data || []).map(mapSupabaseRow);
+  const list = (data || []).map(mapSupabaseRow);
+
+  // Merge client-side click tracker cache for instant real-time sync
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('resovault_click_tracker');
+      if (stored) {
+        const tracker = JSON.parse(stored);
+        for (const item of list) {
+          if (tracker[item.id]) {
+            item.clickCount = Math.max(item.clickCount || 0, tracker[item.id].clickCount || 0);
+            if (tracker[item.id].lastOpenedAt) {
+              if (!item.lastOpenedAt || tracker[item.id].lastOpenedAt > item.lastOpenedAt) {
+                item.lastOpenedAt = tracker[item.id].lastOpenedAt;
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Click tracker sync error:', e);
+    }
+  }
+
+  return list;
+}
+
+// Track click on resource URL: updates local tracker and writes to Supabase
+export async function trackResourceClick(
+  resourceId: string
+): Promise<{ clickCount: number; lastOpenedAt: string }> {
+  const now = new Date().toISOString();
+  let count = 1;
+
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('resovault_click_tracker');
+      const tracker = stored ? JSON.parse(stored) : {};
+      const current = tracker[resourceId]?.clickCount || 0;
+      count = current + 1;
+      tracker[resourceId] = { clickCount: count, lastOpenedAt: now };
+      localStorage.setItem('resovault_click_tracker', JSON.stringify(tracker));
+    } catch (e) {
+      console.warn('Failed to write click to localStorage:', e);
+    }
+  }
+
+  // Attempt database persistence (if column exists)
+  try {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase
+        .from('resources')
+        .update({
+          click_count: count,
+          last_opened_at: now,
+        })
+        .eq('id', resourceId);
+    }
+  } catch {
+    // Ignore schema mismatch if column not yet applied to database
+  }
+
+  return { clickCount: count, lastOpenedAt: now };
+}
+
+// Toggle pinned status of resource
+export async function togglePinResource(
+  resourceId: string,
+  isPinned: boolean
+): Promise<boolean> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from('resources')
+    .update({ is_pinned: isPinned, updated_at: new Date().toISOString() })
+    .eq('id', resourceId);
+
+  if (error) {
+    console.error('Supabase togglePinResource error:', error);
+    return false;
+  }
+  return true;
 }
 
 // Ensure category exists for user

@@ -1,6 +1,60 @@
 import { NextResponse } from 'next/server';
 import { getDomain, getDomainType } from '@/lib/utils';
 
+export function isGenericOrUnhelpful(title: string, url: string = ''): boolean {
+  if (!title || typeof title !== 'string') return true;
+  const clean = title.trim();
+  const lower = clean.toLowerCase();
+  if (clean.length < 3) return true;
+
+  const genericPatterns = [
+    /^google drive:? ?sign[- ]?in.*$/i,
+    /^google drive$/i,
+    /^drive$/i,
+    /^google docs$/i,
+    /^google sheets$/i,
+    /^google slides$/i,
+    /^google forms$/i,
+    /^google$/,
+    /^google accounts$/i,
+    /^sign[- ]?in.*$/i,
+    /.*sign[- ]?in.*google/i,
+    /^log[- ]?in.*$/i,
+    /^sign[- ]?up.*$/i,
+    /^dropbox$/i,
+    /^dropbox.*sign[- ]?in/i,
+    /^onedrive$/i,
+    /^notion$/i,
+    /^notion – the all-in-one workspace.*$/i,
+    /^instagram$/i,
+    /^login • instagram$/i,
+    /^twitter$/i,
+    /^x$/i,
+    /^github$/i,
+    /^youtube$/i,
+    /^404.*$/i,
+    /^page not found.*$/i,
+    /^error.*$/i,
+    /^internal server error.*$/i,
+    /^access denied.*$/i,
+    /^unauthorized.*$/i,
+    /^forbidden.*$/i,
+    /^security check.*$/i,
+    /^just a moment\.\.\..*$/i,
+    /^attention required.*$/i,
+    /^redirecting.*$/i,
+    /.*— review$/i,
+    /^untitled.*$/i,
+    /^home$/i,
+    /^welcome$/i,
+  ];
+
+  for (const pat of genericPatterns) {
+    if (pat.test(lower)) return true;
+  }
+  return false;
+}
+
 interface BulkParseRequest {
   rawText: string;
   existingCategories: string[];
@@ -117,16 +171,26 @@ function ruleBasedCategorize(
 
   // Fallback title formatting if metadata title is empty or generic
   let title = item.title;
-  if (!title || title.length < 3) {
+  let isUnhelpful = isGenericOrUnhelpful(title, item.url);
+
+  if (isUnhelpful || !title || title.length < 3) {
     const cleanDomain = domain.split('.')[0];
     title = cleanDomain.charAt(0).toUpperCase() + cleanDomain.slice(1);
     if (domainType === 'github') title = `GitHub: ${domain}`;
-    if (domainType === 'drive') title = `Google Drive Resource`;
-    if (domainType === 'gdocs') title = `Google Doc Document`;
+    if (domainType === 'drive') title = `Drive Folder — review`;
+    if (domainType === 'gdocs') title = `Google Doc — review`;
+    isUnhelpful = true;
+  } else {
+    // Clean trailing " - Google Drive" suffixes
+    title = title.replace(/\s*[-–|]\s*Google (Drive|Docs|Sheets|Slides)\s*$/i, '').trim();
   }
 
   // Tags generation
   const tagsSet = new Set<string>();
+
+  if (isUnhelpful) {
+    tagsSet.add('needs-review');
+  }
 
   if (domainType === 'github') tagsSet.add('github').add('code');
   if (domainType === 'drive') tagsSet.add('drive').add('files');

@@ -106,10 +106,12 @@ export async function GET(req: Request) {
     const domain = getDomain(normalized);
     const lower = normalized.toLowerCase();
 
+    let isSpecific = false;
+
     // 1. YouTube oEmbed
     if (lower.includes('youtube.com') || lower.includes('youtu.be')) {
       const ytData = await fetchYouTubeOEmbed(normalized);
-      if (ytData && ytData.title) {
+      if (ytData && ytData.title && !isGenericOrUnhelpful(ytData.title, normalized)) {
         return NextResponse.json({
           success: true,
           data: {
@@ -117,19 +119,24 @@ export async function GET(req: Request) {
             title: ytData.title,
             description: ytData.description,
             thumbnail: ytData.thumbnail,
+            isSpecificTitle: true,
           },
         });
       }
     }
 
-    // 2. Open Graph tags
+    // 2. Open Graph tags & <title>
     const ogData = await fetchOpenGraphMetadata(normalized);
 
-    // Fallback title formatting if none found
     let title = ogData.title;
-    if (!title) {
-      const cleanDomain = domain.split('.')[0];
-      title = cleanDomain.charAt(0).toUpperCase() + cleanDomain.slice(1);
+    if (title && !isGenericOrUnhelpful(title, normalized)) {
+      isSpecific = true;
+    } else {
+      isSpecific = false;
+      if (!title || isGenericOrUnhelpful(title, normalized)) {
+        const cleanDomain = domain.split('.')[0];
+        title = cleanDomain.charAt(0).toUpperCase() + cleanDomain.slice(1);
+      }
     }
 
     return NextResponse.json({
@@ -139,10 +146,60 @@ export async function GET(req: Request) {
         title,
         description: ogData.description,
         thumbnail: ogData.thumbnail,
+        isSpecificTitle: isSpecific,
       },
     });
   } catch (error) {
     console.error('Error in GET /api/metadata:', error);
     return NextResponse.json({ error: 'Failed to fetch metadata' }, { status: 500 });
   }
+}
+
+export function isGenericOrUnhelpful(title: string, url: string = ''): boolean {
+  if (!title || typeof title !== 'string') return true;
+  const clean = title.trim().toLowerCase();
+  if (clean.length < 3) return true;
+
+  const genericPatterns = [
+    /^google drive$/,
+    /^drive$/,
+    /^google docs$/,
+    /^google sheets$/,
+    /^google slides$/,
+    /^google forms$/,
+    /^google$/,
+    /^google accounts$/,
+    /^sign in.*$/,
+    /^login.*$/,
+    /^log in.*$/,
+    /^sign up.*$/,
+    /^dropbox$/,
+    /^onedrive$/,
+    /^notion$/,
+    /^instagram$/,
+    /^twitter$/,
+    /^x$/,
+    /^github$/,
+    /^youtube$/,
+    /^404.*$/,
+    /^page not found.*$/,
+    /^error.*$/,
+    /^internal server error.*$/,
+    /^access denied.*$/,
+    /^unauthorized.*$/,
+    /^forbidden.*$/,
+    /^security check.*$/,
+    /^just a moment\.\.\..*$/,
+    /^attention required.*$/,
+    /^redirecting.*$/,
+    /.*— review$/,
+    /^untitled.*$/,
+    /^home$/,
+    /^welcome$/
+  ];
+
+  for (const pat of genericPatterns) {
+    if (pat.test(clean)) return true;
+  }
+  return false;
 }

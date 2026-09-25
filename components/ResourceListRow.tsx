@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ExternalLink, Copy, Check, Edit2, Trash2, Tag as TagIcon, Folder, Globe } from 'lucide-react';
+import { ExternalLink, Copy, Check, Edit2, Trash2, Tag as TagIcon, Folder, Globe, Pin } from 'lucide-react';
 import { Resource } from '@/lib/types';
 import { getDomain, getFaviconUrl } from '@/lib/utils';
 
@@ -9,6 +9,8 @@ interface ResourceListRowProps {
   resource: Resource;
   onEdit: (resource: Resource) => void;
   onDelete: (id: string) => void;
+  onTogglePin?: (id: string, isPinned: boolean) => void;
+  onResourceClick?: (id: string) => void;
   onTagClick?: (tag: string) => void;
   onCategoryClick?: (category: string) => void;
 }
@@ -17,6 +19,8 @@ export const ResourceListRow: React.FC<ResourceListRowProps> = ({
   resource,
   onEdit,
   onDelete,
+  onTogglePin,
+  onResourceClick,
   onTagClick,
   onCategoryClick,
 }) => {
@@ -32,8 +36,18 @@ export const ResourceListRow: React.FC<ResourceListRowProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleLinkClick = () => {
+    onResourceClick?.(resource.id);
+  };
+
   return (
-    <div className="group bg-zinc-900/80 hover:bg-zinc-900 border border-zinc-800/80 hover:border-zinc-700/80 rounded-xl p-3 sm:px-4 transition-all duration-150 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div
+      className={`group border rounded-xl p-3 sm:px-4 transition-all duration-150 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+        resource.isPinned
+          ? 'bg-zinc-900/95 border-amber-500/40 ring-1 ring-amber-500/20 shadow-md'
+          : 'bg-zinc-900/80 hover:bg-zinc-900 border-zinc-800/80 hover:border-zinc-700/80'
+      }`}
+    >
       {/* Title & Domain Info */}
       <div className="flex items-center gap-3 min-w-0 flex-1">
         {faviconUrl ? (
@@ -56,6 +70,7 @@ export const ResourceListRow: React.FC<ResourceListRowProps> = ({
               href={resource.url}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={handleLinkClick}
               className="font-semibold text-sm text-zinc-100 hover:text-indigo-300 transition-colors inline-flex items-center gap-1.5 truncate"
             >
               <span className="truncate">{resource.title}</span>
@@ -69,10 +84,21 @@ export const ResourceListRow: React.FC<ResourceListRowProps> = ({
               <Folder className="w-2.5 h-2.5" />
               <span>{resource.category}</span>
             </button>
+
+            {resource.isPinned && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                <Pin className="w-2.5 h-2.5 fill-amber-300 rotate-45" /> Pinned
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-3 text-xs text-zinc-400 mt-0.5">
             <span className="truncate max-w-[200px]">{domain}</span>
+            {typeof resource.clickCount === 'number' && resource.clickCount > 0 && (
+              <span className="text-[11px] text-zinc-500 font-mono">
+                • {resource.clickCount} click{resource.clickCount !== 1 ? 's' : ''}
+              </span>
+            )}
             {resource.notes && (
               <span className="hidden md:inline truncate max-w-[300px] text-zinc-500">
                 • {resource.notes}
@@ -90,7 +116,11 @@ export const ResourceListRow: React.FC<ResourceListRowProps> = ({
               <button
                 key={tag}
                 onClick={() => onTagClick?.(tag)}
-                className="text-[10px] text-zinc-400 hover:text-zinc-200 bg-zinc-800/80 px-2 py-0.5 rounded-md border border-zinc-700/30 transition-colors"
+                className={`text-[10px] px-2 py-0.5 rounded-md border transition-colors ${
+                  tag === 'needs-review'
+                    ? 'text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 font-semibold'
+                    : 'text-zinc-400 hover:text-zinc-200 bg-zinc-800/80 border-zinc-700/30'
+                }`}
               >
                 #{tag}
               </button>
@@ -104,6 +134,18 @@ export const ResourceListRow: React.FC<ResourceListRowProps> = ({
         )}
 
         <div className="flex items-center gap-1">
+          {/* Pin Toggle */}
+          <button
+            onClick={() => onTogglePin?.(resource.id, !resource.isPinned)}
+            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+              resource.isPinned
+                ? 'text-amber-400 bg-amber-500/15 hover:bg-amber-500/25'
+                : 'text-zinc-500 hover:text-amber-300 hover:bg-zinc-800'
+            }`}
+            title={resource.isPinned ? 'Unpin resource' : 'Pin resource to top'}
+          >
+            <Pin className={`w-4 h-4 ${resource.isPinned ? 'fill-amber-400 rotate-45' : ''}`} />
+          </button>
           <button
             onClick={handleCopy}
             className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"

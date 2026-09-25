@@ -15,6 +15,7 @@ import { NewsDigestTab } from '@/components/NewsDigestTab';
 import { ScheduleTab } from '@/components/ScheduleTab';
 import { Resource, ViewMode, SortOption, CategoryStat, User, AppTab, NewsArticle } from '@/lib/types';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import Fuse from 'fuse.js';
 import {
   fetchResources,
   createResource,
@@ -23,6 +24,8 @@ import {
   bulkSaveResources,
   fetchCategories,
   DEFAULT_STARTING_CATEGORIES,
+  trackResourceClick,
+  togglePinResource,
 } from '@/lib/storage';
 import {
   Plus,
@@ -52,6 +55,8 @@ export default function Home() {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [sortOption, setSortOption] = useState<SortOption>('newest');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [tagFilterMode, setTagFilterMode] = useState<'AND' | 'OR'>('AND');
   const [userCategories, setUserCategories] = useState<CategoryStat[]>([]);
 
   // Modals state
@@ -208,50 +213,146 @@ export default function Home() {
     return Array.from(set).sort();
   }, [resources]);
 
-  // Filter & Search resources
-  const filteredResources = useMemo(() => {
-    let result = [...resources];
+  // Tag filter handlers
+  const handleToggleTag = useCallback((tag: string) => {
+    setSelectedTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  }, []);
 
-    // Category filter
+  const handleClearTags = useCallback(() => {
+    setSelectedTags([]);
+  }, []);
+
+  // Favorite / Pin toggle handler: persists to Supabase and updates state immediately
+  const handleTogglePin = useCallback(async (resourceId: string, nextPinned: boolean) => {
+    setResources((prev) =>
+      prev.map((r) => (r.id === resourceId ? { ...r, isPinned: nextPinned } : r))
+    );
+    try {
+      await togglePinResource(resourceId, nextPinned);
+    } catch (e) {
+      console.warn('Failed to toggle pin on Supabase:', e);
+    }
+  }, []);
+
+  // Click tracking handler: increment click counter, update lastOpenedAt, and persist
+  const handleResourceClick = useCallback(async (resourceId: string) => {
+    const now = new Date().toISOString();
+    setResources((prev) =>
+      prev.map((r) =>
+        r.id === resourceId
+          ? {
+              ...r,
+              clickCount: (r.clickCount || 0) + 1,
+              lastOpenedAt: now,
+            }
+          : r
+      )
+    );
+    try {
+      await trackResourceClick(resourceId);
+    } catch (e) {
+      console.warn('Failed to track click on Supabase:', e);
+    }
+  }, []);
+
+  // Filter & Search resources with Fuse.js (Fuzzy, Typo-Tolerant & Relevance Ranked)
+  const filteredResources = useMemo(() => {
+    let list = [...resources];
+
+    // 1. Category Filter (single-select)
     if (activeCategory) {
-      result = result.filter((r) => r.category === activeCategory);
+      list = list.filter((r) => r.category === activeCategory);
     }
 
-    // Search query filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim();
-      const cleanTagQuery = query.replace(/^#/, '');
-
-      result = result.filter((r) => {
-        const titleMatch = r.title.toLowerCase().includes(query);
-        const categoryMatch = r.category.toLowerCase().includes(query);
-        const notesMatch = (r.description || r.notes || '').toLowerCase().includes(query);
-        const urlMatch = r.url.toLowerCase().includes(query);
-        const tagMatch = r.tags?.some((t) => t.toLowerCase().includes(cleanTagQuery));
-
-        return titleMatch || categoryMatch || notesMatch || urlMatch || tagMatch;
+    // 2. Tag Filter (multi-select with AND / OR toggle)
+    if (selectedTags.length > 0) {
+      list = list.filter((r) => {
+        const itemTags = (r.tags || []).map((t) => t.toLowerCase());
+        if (tagFilterMode === 'AND') {
+          return selectedTags.every((st) => itemTags.includes(st.toLowerCase()));
+        } else {
+          return selectedTags.some((st) => itemTags.includes(st.toLowerCase()));
+        }
       });
     }
 
-    // Sort
-    result.sort((a, b) => {
-      if (sortOption === 'newest') {
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      }
-      if (sortOption === 'oldest') {
-        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-      }
-      if (sortOption === 'title-asc') {
-        return a.title.localeCompare(b.title);
-      }
-      if (sortOption === 'title-desc') {
-        return b.title.localeCompare(a.title);
-      }
-      return 0;
-    });
+    // 3. Feature 3: Smart Fuzzy Search across title, category, tags, notes, and url
+    const query = searchQuery.trim();
+    let searchResultScores: Map<string, number> | null = null;
 
-    return result;
-  }, [resources, activeCategory, searchQuery, sortOption]);
+    if (query) {
+      // If user typed a hashtag like #ai, perform direct tag matching
+      if (query.startsWith('#')) {
+        const cleanTag = query.slice(1).toLowerCase().trim();
+        list = list.filter((r) =>
+          r.tags?.some((t) => t.toLowerCase().includes(cleanTag))
+        );
+      } else {
+        const fuse = new Fuse(list, {
+          keys: [
+            { name: 'title', weight: 0.40 },
+            { name: 'category', weight: 0.20 },
+            { name: 'tags', weight: 0.20 },
+            { name: 'notes', weight: 0.12 },
+            { name: 'description', weight: 0.12 },
+            { name: 'url', weight: 0.08 },
+          ],
+          threshold: 0.38, // Balance between typo tolerance and accurate precision
+          ignoreLocation: true,
+          includeScore: true,
+        });
+
+        const fuseResults = fuse.search(query);
+        searchResultScores = new Map();
+        fuseResults.forEach((res) => {
+          searchResultScores!.set(res.item.id, res.score ?? 1);
+        });
+
+        list = fuseResults.map((res) => res.item);
+      }
+    }
+
+    // 4. Feature 2 Sorting Comparator
+    const sortComparator = (a: Resource, b: Resource) => {
+      switch (sortOption) {
+        case 'newest':
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        case 'oldest':
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        case 'title-asc':
+          return a.title.localeCompare(b.title);
+        case 'title-desc':
+          return b.title.localeCompare(a.title);
+        case 'mru': {
+          const timeA = a.lastOpenedAt ? new Date(a.lastOpenedAt).getTime() : 0;
+          const timeB = b.lastOpenedAt ? new Date(b.lastOpenedAt).getTime() : 0;
+          return timeB - timeA;
+        }
+        case 'most-used':
+          return (b.clickCount || 0) - (a.clickCount || 0);
+        case 'least-used':
+          return (a.clickCount || 0) - (b.clickCount || 0);
+        default:
+          if (searchResultScores) {
+            const scoreA = searchResultScores.get(a.id) ?? 1;
+            const scoreB = searchResultScores.get(b.id) ?? 1;
+            return scoreA - scoreB;
+          }
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+    };
+
+    // Pinned resources ALWAYS show at the top regardless of sort order
+    const pinned = list.filter((r) => Boolean(r.isPinned));
+    const unpinned = list.filter((r) => !r.isPinned);
+
+    pinned.sort(sortComparator);
+    unpinned.sort(sortComparator);
+
+    return [...pinned, ...unpinned];
+  }, [resources, activeCategory, selectedTags, tagFilterMode, searchQuery, sortOption]);
 
   // Resource CRUD Handlers with Supabase
   const handleSaveResource = async (
@@ -523,22 +624,30 @@ export default function Home() {
           />
         )}
 
-        {/* Stats & Sorting Bar */}
+        {/* Stats & Sorting Bar with Category Dropdown and Tag Multi-Select */}
         {user && (
           <StatsBar
             totalResources={resources.length}
-            totalCategories={categoriesStat.length}
-            totalTags={existingTags.length}
+            filteredResourcesCount={filteredResources.length}
+            categories={categoriesStat}
+            activeCategory={activeCategory}
+            onSelectCategory={setActiveCategory}
+            allTags={existingTags}
+            selectedTags={selectedTags}
+            onToggleTag={handleToggleTag}
+            onClearTags={handleClearTags}
+            tagFilterMode={tagFilterMode}
+            setTagFilterMode={setTagFilterMode}
             sortOption={sortOption}
             setSortOption={setSortOption}
           />
         )}
 
         {/* Search / Filter Active Indicator */}
-        {user && (searchQuery || activeCategory) && (
-          <div className="mb-4 flex items-center justify-between bg-indigo-500/10 border border-indigo-500/20 px-4 py-2.5 rounded-xl text-xs">
-            <div className="flex items-center gap-2 text-indigo-300 font-medium">
-              <Sparkles className="w-4 h-4 text-indigo-400" />
+        {user && (searchQuery || activeCategory || selectedTags.length > 0) && (
+          <div className="mb-4 flex items-center justify-between bg-indigo-500/10 border border-indigo-500/20 px-4 py-2.5 rounded-xl text-xs flex-wrap gap-2">
+            <div className="flex items-center gap-2 text-indigo-300 font-medium flex-wrap">
+              <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />
               <span>
                 Showing {filteredResources.length} matching result{filteredResources.length !== 1 ? 's' : ''}
                 {activeCategory && (
@@ -546,9 +655,17 @@ export default function Home() {
                     {' '}in folder <strong className="text-white">&quot;{activeCategory}&quot;</strong>
                   </span>
                 )}
+                {selectedTags.length > 0 && (
+                  <span>
+                    {' '}matching tags ({tagFilterMode}):{' '}
+                    <strong className="text-white">
+                      {selectedTags.map((t) => `#${t}`).join(', ')}
+                    </strong>
+                  </span>
+                )}
                 {searchQuery && (
                   <span>
-                    {' '}for query <strong className="text-white">&quot;{searchQuery}&quot;</strong>
+                    {' '}for search <strong className="text-white">&quot;{searchQuery}&quot;</strong>
                   </span>
                 )}
               </span>
@@ -557,6 +674,7 @@ export default function Home() {
               onClick={() => {
                 setSearchQuery('');
                 setActiveCategory(null);
+                setSelectedTags([]);
               }}
               className="text-xs font-semibold text-indigo-400 hover:text-indigo-200 underline transition-colors cursor-pointer"
             >
@@ -583,7 +701,9 @@ export default function Home() {
                     setIsAddModalOpen(true);
                   }}
                   onDelete={(id) => setDeletingId(id)}
-                  onTagClick={(tag) => setSearchQuery(`#${tag}`)}
+                  onTogglePin={handleTogglePin}
+                  onResourceClick={handleResourceClick}
+                  onTagClick={(tag) => handleToggleTag(tag)}
                   onCategoryClick={(cat) => setActiveCategory(cat)}
                 />
               ))}
@@ -599,7 +719,9 @@ export default function Home() {
                     setIsAddModalOpen(true);
                   }}
                   onDelete={(id) => setDeletingId(id)}
-                  onTagClick={(tag) => setSearchQuery(`#${tag}`)}
+                  onTogglePin={handleTogglePin}
+                  onResourceClick={handleResourceClick}
+                  onTagClick={(tag) => handleToggleTag(tag)}
                   onCategoryClick={(cat) => setActiveCategory(cat)}
                 />
               ))}

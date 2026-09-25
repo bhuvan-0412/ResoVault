@@ -9,6 +9,8 @@ interface ResourceCardProps {
   resource: Resource;
   onEdit: (resource: Resource) => void;
   onDelete: (id: string) => void;
+  onTogglePin?: (id: string, isPinned: boolean) => void;
+  onResourceClick?: (id: string) => void;
   onTagClick?: (tag: string) => void;
   onCategoryClick?: (category: string) => void;
 }
@@ -17,6 +19,8 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
   resource,
   onEdit,
   onDelete,
+  onTogglePin,
+  onResourceClick,
   onTagClick,
   onCategoryClick,
 }) => {
@@ -31,6 +35,10 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
     navigator.clipboard.writeText(resource.url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleLinkClick = () => {
+    onResourceClick?.(resource.id);
   };
 
   // Helper for rendering specific icon style
@@ -74,7 +82,6 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
             alt={domain}
             className="w-8 h-8 rounded-lg bg-zinc-800 p-1 border border-zinc-700/50 object-contain shrink-0"
             onError={(e) => {
-              // fallback if favicon fails
               (e.target as HTMLElement).style.display = 'none';
             }}
           />
@@ -87,31 +94,66 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
   };
 
   return (
-    <div className="group relative bg-zinc-900/90 hover:bg-zinc-900 border border-zinc-800/90 hover:border-zinc-700/80 rounded-2xl p-4 transition-all duration-200 hover:shadow-xl hover:shadow-indigo-500/5 flex flex-col justify-between">
+    <div
+      className={`group relative bg-zinc-900/90 hover:bg-zinc-900 border rounded-2xl p-4 transition-all duration-200 hover:shadow-xl hover:shadow-indigo-500/5 flex flex-col justify-between ${
+        resource.isPinned
+          ? 'border-amber-500/40 bg-gradient-to-b from-amber-500/[0.03] to-transparent ring-1 ring-amber-500/20'
+          : 'border-zinc-800/90 hover:border-zinc-700/80'
+      }`}
+    >
       <div>
         {/* Header: Icon, Category & Actions */}
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex items-center gap-2.5 min-w-0">
             {renderDomainBadge()}
             <div className="min-w-0">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCategoryClick?.(resource.category);
-                }}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-2 py-0.5 rounded-md transition-colors truncate max-w-full"
-              >
-                <Folder className="w-3 h-3 shrink-0" />
-                <span className="truncate">{resource.category}</span>
-              </button>
-              <div className="text-[11px] text-zinc-400 truncate mt-0.5" title={resource.url}>
-                {domain}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCategoryClick?.(resource.category);
+                  }}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-2 py-0.5 rounded-md transition-colors truncate max-w-full"
+                >
+                  <Folder className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{resource.category}</span>
+                </button>
+                {resource.isPinned && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                    <Pin className="w-2.5 h-2.5 fill-amber-300 rotate-45" /> Pinned
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-zinc-400 truncate mt-0.5">
+                <span className="truncate" title={resource.url}>
+                  {domain}
+                </span>
+                {typeof resource.clickCount === 'number' && resource.clickCount > 0 && (
+                  <span className="text-[10px] text-zinc-500 font-mono">
+                    • {resource.clickCount} click{resource.clickCount !== 1 ? 's' : ''}
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
           {/* Action Toolbar */}
           <div className="flex items-center gap-1 shrink-0 opacity-90 group-hover:opacity-100 transition-opacity">
+            {/* Pin / Favorite Toggle */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onTogglePin?.(resource.id, !resource.isPinned);
+              }}
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                resource.isPinned
+                  ? 'text-amber-400 bg-amber-500/15 hover:bg-amber-500/25'
+                  : 'text-zinc-500 hover:text-amber-300 hover:bg-zinc-800'
+              }`}
+              title={resource.isPinned ? 'Unpin resource' : 'Pin resource to top'}
+            >
+              <Pin className={`w-3.5 h-3.5 ${resource.isPinned ? 'fill-amber-400 rotate-45' : ''}`} />
+            </button>
             <button
               onClick={handleCopy}
               className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
@@ -142,11 +184,12 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
           </div>
         </div>
 
-        {/* Title Link (Opens in New Tab) */}
+        {/* Title Link (Opens in New Tab with click tracking) */}
         <a
           href={resource.url}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={handleLinkClick}
           className="group/title flex items-start gap-2 text-base font-semibold text-zinc-100 hover:text-indigo-300 transition-colors mb-2 leading-snug line-clamp-2"
         >
           <span>{resource.title}</span>
@@ -171,7 +214,11 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
                 e.stopPropagation();
                 onTagClick?.(tag);
               }}
-              className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-400 hover:text-zinc-200 bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700/40 px-2 py-0.5 rounded-md transition-colors"
+              className={`inline-flex items-center gap-1 text-[11px] font-medium border px-2 py-0.5 rounded-md transition-colors ${
+                tag === 'needs-review'
+                  ? 'text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30'
+                  : 'text-zinc-400 hover:text-zinc-200 bg-zinc-800/60 hover:bg-zinc-800 border-zinc-700/40'
+              }`}
             >
               <TagIcon className="w-2.5 h-2.5 text-zinc-500" />
               <span>{tag}</span>

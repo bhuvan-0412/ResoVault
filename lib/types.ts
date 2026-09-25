@@ -8,6 +8,8 @@ export interface Resource {
   description?: string;
   notes?: string;
   isPinned?: boolean;
+  clickCount?: number;
+  lastOpenedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -32,11 +34,19 @@ export interface UrlMetadata {
   title: string;
   description: string;
   thumbnail?: string;
+  isSpecificTitle?: boolean;
 }
 
 export type ViewMode = 'grid' | 'list';
 
-export type SortOption = 'newest' | 'oldest' | 'title-asc' | 'title-desc';
+export type SortOption =
+  | 'newest'
+  | 'oldest'
+  | 'title-asc'
+  | 'title-desc'
+  | 'mru'
+  | 'most-used'
+  | 'least-used';
 
 export interface CategoryStat {
   name: string;
