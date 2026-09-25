@@ -1,8 +1,6 @@
 import { createClient, isSupabaseConfigured } from './supabase/client';
 import { Resource, CategoryStat, UrlMetadata } from './types';
 
-export const LOCAL_STORAGE_KEY = 'resource_hub_data_v1';
-export const LOCAL_STORAGE_MIGRATED_KEY = 'resource_hub_migrated_to_db';
 
 export const DEFAULT_STARTING_CATEGORIES = [
   'Video Editing',
@@ -262,33 +260,4 @@ export async function fetchUrlMetadata(url: string): Promise<UrlMetadata | null>
   return null;
 }
 
-// LocalStorage helpers for migration and data safety
-export function getLocalStoredResources(): Resource[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
 
-export function isLocalStorageMigrationNeeded(): boolean {
-  if (typeof window === 'undefined') return false;
-  const isMigrated = localStorage.getItem(LOCAL_STORAGE_MIGRATED_KEY) === 'true';
-  if (isMigrated) return false;
-  const resources = getLocalStoredResources();
-  return resources.length > 0;
-}
-
-export function markLocalStorageMigrated(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(LOCAL_STORAGE_MIGRATED_KEY, 'true');
-}
-
-export function clearLocalStoredResources(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem(LOCAL_STORAGE_KEY);
-}

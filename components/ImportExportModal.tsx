@@ -1,16 +1,11 @@
 'use client';
 
-import React, { useRef, useState, useEffect } from 'react';
-import { Download, Upload, X, Check, FileJson, AlertCircle, Trash2, RefreshCw, Database, CloudUpload } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { Download, Upload, X, Check, FileJson, AlertCircle, Trash2, RefreshCw } from 'lucide-react';
 import { Resource } from '@/lib/types';
 import {
   INITIAL_RESOURCES,
 } from '@/lib/utils';
-import {
-  getLocalStoredResources,
-  markLocalStorageMigrated,
-  clearLocalStoredResources,
-} from '@/lib/storage';
 
 interface ImportExportModalProps {
   isOpen: boolean;
@@ -28,13 +23,6 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [errorStatus, setErrorStatus] = useState<string | null>(null);
-  const [localStoredItems, setLocalStoredItems] = useState<Resource[]>([]);
-
-  useEffect(() => {
-    if (isOpen) {
-      setLocalStoredItems(getLocalStoredResources());
-    }
-  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -48,31 +36,6 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
-  };
-
-  // Export local storage JSON file
-  const handleExportLocalStorage = () => {
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(localStoredItems, null, 2));
-    const downloadAnchor = document.createElement('a');
-    const fileName = `resovault-local-storage-backup-${new Date().toISOString().split('T')[0]}.json`;
-    downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', fileName);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-  };
-
-  // Migrate local storage resources into account
-  const handleMigrateLocalStorage = () => {
-    if (localStoredItems.length === 0) return;
-    onImport(localStoredItems);
-    markLocalStorageMigrated();
-    setImportStatus(`Migrated ${localStoredItems.length} local storage items to your account!`);
-    setErrorStatus(null);
-    setTimeout(() => {
-      setImportStatus(null);
-      onClose();
-    }, 1500);
   };
 
   // Import JSON file
@@ -162,37 +125,6 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
         )}
 
         <div className="space-y-3 mb-6">
-          {/* Local Storage Migration Section (if local items exist) */}
-          {localStoredItems.length > 0 && (
-            <div className="p-4 rounded-xl bg-gradient-to-r from-indigo-950/40 via-zinc-900 to-indigo-950/40 border border-indigo-500/30 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Database className="w-4 h-4 text-indigo-400" />
-                  <span className="text-xs font-bold text-zinc-200">Local Browser Storage</span>
-                </div>
-                <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-semibold">
-                  {localStoredItems.length} items
-                </span>
-              </div>
-              <p className="text-xs text-zinc-400">
-                You have testing data sitting in your browser. Migrate it to your account so it syncs across all devices, or export it to a file.
-              </p>
-              <div className="flex items-center gap-2 pt-1">
-                <button
-                  onClick={handleMigrateLocalStorage}
-                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm transition-all"
-                >
-                  <CloudUpload className="w-3.5 h-3.5" /> Migrate to Account
-                </button>
-                <button
-                  onClick={handleExportLocalStorage}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium border border-zinc-700 transition-all"
-                >
-                  <Download className="w-3.5 h-3.5" /> Export Local
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* Export Button */}
           <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-between">

@@ -1,0 +1,12 @@
+[
+  {
+    "id": "sample-1",
+    "title": "Example Documentation",
+    "url": "https://example.com/docs",
+    "category": "Development",
+    "tags": ["example", "docs"],
+    "notes": "Sample resource template.",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "updatedAt": "2026-01-01T00:00:00.000Z"
+  }
+]

@@ -31,7 +31,6 @@ d:\Resource Hub/
 │   ├── page.tsx                # Main view: Vault vs Daily Digest tabs
 │   ├── auth/callback/route.ts  # Supabase OAuth redirect exchange handler
 │   └── api/
-│       ├── resources/route.ts   # CRUD endpoint for personal links
 │       ├── categories/route.ts  # User categories endpoint
 │       ├── metadata/route.ts    # YouTube oEmbed & Open Graph scraper
 │       ├── bulk-parse/route.ts  # AI/Regex parser for unstructured chat text
@@ -51,7 +50,6 @@ d:\Resource Hub/
 │   ├── AddEditModal.tsx         # Single link add/edit form with auto-fetch
 │   ├── BulkImportModal.tsx      # Multi-link paste & AI categorization modal
 │   ├── AuthModal.tsx            # Google Sign-In modal
-│   ├── MigrationBanner.tsx      # Browser localStorage to Supabase migration banner
 │   └── StatsBar.tsx             # Total counts & sorting dropdowns
 ├── lib/
 │   ├── types.ts                 # Core TypeScript interfaces (Resource, NewsArticle, etc.)

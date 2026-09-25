@@ -11,7 +11,6 @@ import { ImportExportModal } from '@/components/ImportExportModal';
 import { BulkImportModal } from '@/components/BulkImportModal';
 import { StatsBar } from '@/components/StatsBar';
 import { AuthModal } from '@/components/AuthModal';
-import { MigrationBanner } from '@/components/MigrationBanner';
 import { NewsDigestTab } from '@/components/NewsDigestTab';
 import { ScheduleTab } from '@/components/ScheduleTab';
 import { Resource, ViewMode, SortOption, CategoryStat, User, AppTab, NewsArticle } from '@/lib/types';
@@ -321,12 +320,6 @@ export default function Home() {
     }
   };
 
-  // Migration from local storage completion
-  const handleMigrationComplete = (migratedResources: Resource[]) => {
-    setResources((prev) => [...migratedResources, ...prev]);
-    fetchCategories().then(setUserCategories).catch(console.warn);
-  };
-
   // Save article from News Digest into user's Supabase vault
   const handleSaveNewsArticleToVault = async (article: NewsArticle) => {
     if (!user) {
@@ -509,9 +502,6 @@ export default function Home() {
             </div>
           </div>
         )}
-
-        {/* Local Storage Migration Banner (for users with pre-existing browser testing data) */}
-        <MigrationBanner onMigrationComplete={handleMigrationComplete} />
 
         {/* Category Folders Overview */}
         {user && (

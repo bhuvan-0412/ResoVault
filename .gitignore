@@ -13,8 +13,12 @@
 # production
 /build
 
-# scratch
+# scratch and local data
 /scratch/
+data/*.json
+!data/resources.json.example
+*.backup.json
+*export*.json
 
 # misc
 .DS_Store
