@@ -24,6 +24,7 @@ import {
   ShieldAlert,
   ArrowRight,
   Zap,
+  MapPin,
 } from 'lucide-react';
 import {
   FixedEvent,
@@ -85,24 +86,24 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
   // Filter for todos
   const [todoFilter, setTodoFilter] = useState<'all' | 'open' | 'completed'>('open');
 
-  // 1. Fetch user data (fixed events, todos, preferences, conflicts)
+  // 1. Fetch user data (fixed classes, deadlines, preferences, conflicts)
   const loadBaseData = useCallback(async () => {
     if (!isAuthenticated) return;
     try {
       const [fixedRes, todosRes, conflictsRes, statsRes] = await Promise.all([
-        fetch('/api/schedule/fixed-events'),
-        fetch('/api/schedule/todos'),
+        fetch('/api/schedule/fixed-classes'),
+        fetch('/api/schedule/deadlines'),
         fetch('/api/schedule/conflicts'),
         fetch(`/api/schedule/completions?date=${selectedDate}`),
       ]);
 
       if (fixedRes.ok) {
         const data = await fixedRes.json();
-        setFixedEvents(data.events || []);
+        setFixedEvents(data.classes || data.events || []);
       }
       if (todosRes.ok) {
         const data = await todosRes.json();
-        setTodos(data.todos || []);
+        setTodos(data.deadlines || data.todos || []);
       }
       if (conflictsRes.ok) {
         const data = await conflictsRes.json();
@@ -226,62 +227,63 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
     }
   };
 
-  // 4. Fixed Event Handlers
+  // 4. Fixed Class Handlers
   const handleSaveFixedEvent = async (
     eventData: Omit<FixedEvent, 'id' | 'userId' | 'createdAt'> & { id?: string }
   ) => {
     const isEdit = Boolean(eventData.id);
     const method = isEdit ? 'PUT' : 'POST';
-    const res = await fetch('/api/schedule/fixed-events', {
+    const res = await fetch('/api/schedule/fixed-classes', {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(eventData),
     });
     if (!res.ok) {
       const data = await res.json();
-      throw new Error(data.error || 'Failed to save fixed event');
+      throw new Error(data.error || 'Failed to save fixed class');
     }
     await loadBaseData();
   };
 
   const handleDeleteFixedEvent = async (id: string) => {
-    await fetch(`/api/schedule/fixed-events?id=${id}`, { method: 'DELETE' });
+    await fetch(`/api/schedule/fixed-classes?id=${id}`, { method: 'DELETE' });
     setFixedEvents((prev) => prev.filter((e) => e.id !== id));
     await loadBaseData();
   };
 
-  // 5. Todo Item Handlers
+  // 5. Deadline / Task Handlers
   const handleSaveTodo = async (
     todoData: Omit<TodoItem, 'id' | 'userId' | 'createdAt' | 'completedAt'> & { id?: string }
   ) => {
     const isEdit = Boolean(todoData.id);
     const method = isEdit ? 'PUT' : 'POST';
-    const res = await fetch('/api/schedule/todos', {
+    const res = await fetch('/api/schedule/deadlines', {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(todoData),
     });
     if (!res.ok) {
       const data = await res.json();
-      throw new Error(data.error || 'Failed to save task');
+      throw new Error(data.error || 'Failed to save deadline');
     }
     await loadBaseData();
   };
 
   const handleToggleTodoComplete = async (todo: TodoItem) => {
-    const newStatus = !todo.completed;
+    const nextStatus = todo.status === 'done' || todo.completed ? 'not_started' : 'done';
+    const isCompleted = nextStatus === 'done';
     setTodos((prev) =>
-      prev.map((t) => (t.id === todo.id ? { ...t, completed: newStatus } : t))
+      prev.map((t) => (t.id === todo.id ? { ...t, status: nextStatus, completed: isCompleted } : t))
     );
-    await fetch('/api/schedule/todos', {
+    await fetch('/api/schedule/deadlines', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: todo.id, completed: newStatus }),
+      body: JSON.stringify({ id: todo.id, status: nextStatus, completed: isCompleted }),
     });
   };
 
   const handleDeleteTodo = async (id: string) => {
-    await fetch(`/api/schedule/todos?id=${id}`, { method: 'DELETE' });
+    await fetch(`/api/schedule/deadlines?id=${id}`, { method: 'DELETE' });
     setTodos((prev) => prev.filter((t) => t.id !== id));
   };
 
@@ -803,34 +805,59 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
                 const isDueSoon =
                   todo.dueDate &&
                   new Date(todo.dueDate).getTime() - new Date().getTime() < 24 * 60 * 60 * 1000;
+                const isDone = todo.status === 'done' || todo.completed;
+                const isInProgress = todo.status === 'in_progress';
 
                 return (
                   <div
                     key={todo.id}
                     className={`p-3.5 rounded-xl bg-zinc-900/80 border transition-all flex items-center justify-between gap-3 ${
-                      todo.completed
+                      isDone
                         ? 'border-zinc-800/50 opacity-60'
                         : isDueSoon
                         ? 'border-amber-500/30'
                         : 'border-zinc-800'
                     }`}
                   >
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-start gap-3 min-w-0 flex-1">
                       <input
                         type="checkbox"
-                        checked={todo.completed}
+                        checked={isDone}
                         onChange={() => handleToggleTodoComplete(todo)}
-                        className="w-4 h-4 rounded text-indigo-600 bg-zinc-950 border-zinc-700 accent-indigo-500 cursor-pointer"
+                        className="mt-1 w-4 h-4 rounded text-indigo-600 bg-zinc-950 border-zinc-700 accent-indigo-500 cursor-pointer shrink-0"
                       />
-                      <div className="min-w-0">
-                        <p
-                          className={`text-xs font-semibold truncate ${
-                            todo.completed ? 'line-through text-zinc-500' : 'text-zinc-100'
-                          }`}
-                        >
-                          {todo.title}
-                        </p>
-                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-zinc-400">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p
+                            className={`text-xs font-semibold truncate ${
+                              isDone ? 'line-through text-zinc-500' : 'text-zinc-100'
+                            }`}
+                          >
+                            {todo.title}
+                          </p>
+                          {/* Status Badge */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleTodoComplete(todo)}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition-all cursor-pointer ${
+                              isDone
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                : isInProgress
+                                ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                : 'bg-zinc-800 text-zinc-400 border border-zinc-700/50'
+                            }`}
+                          >
+                            {isDone ? 'Done' : isInProgress ? 'In Progress' : 'Not Started'}
+                          </button>
+                        </div>
+
+                        {todo.description && (
+                          <p className="text-[11px] text-zinc-400 mt-0.5 line-clamp-1">
+                            {todo.description}
+                          </p>
+                        )}
+
+                        <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-zinc-400">
                           <span
                             className={`px-1.5 py-0.2 rounded text-[10px] font-semibold uppercase ${
                               todo.priority === 'high'
@@ -851,14 +878,19 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
                             >
                               <Calendar className="w-3 h-3" />
                               {new Date(todo.dueDate).toLocaleDateString()}
+                              {todo.dueTime && ` at ${todo.dueTime.slice(0, 5)}`}
                             </span>
                           )}
-                          {todo.category && <span>• {todo.category}</span>}
+                          {todo.category && (
+                            <span className="px-1.5 py-0.5 rounded bg-zinc-800/80 text-[10px] text-zinc-300">
+                              {todo.category}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 shrink-0">
                       <button
                         onClick={() => {
                           setEditingTodo(todo);
@@ -940,38 +972,58 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
 
                   {dayEvents.length > 0 ? (
                     <div className="space-y-2 flex-1">
-                      {dayEvents.map((fe) => (
-                        <div
-                          key={fe.id}
-                          className="p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800/80 flex items-center justify-between gap-2"
-                        >
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold text-zinc-100 truncate">{fe.title}</p>
-                            <p className="text-[11px] font-mono text-violet-400 mt-0.5">
-                              {fe.startTime.slice(0, 5)} – {fe.endTime.slice(0, 5)}
-                            </p>
+                      {dayEvents.map((fe) => {
+                        const colorMap: Record<string, string> = {
+                          indigo: 'border-l-indigo-500 text-indigo-400',
+                          violet: 'border-l-violet-500 text-violet-400',
+                          emerald: 'border-l-emerald-500 text-emerald-400',
+                          amber: 'border-l-amber-500 text-amber-400',
+                          rose: 'border-l-rose-500 text-rose-400',
+                          sky: 'border-l-sky-500 text-sky-400',
+                        };
+                        const colorClass = colorMap[fe.color || 'indigo'] || 'border-l-violet-500 text-violet-400';
+
+                        return (
+                          <div
+                            key={fe.id}
+                            className={`p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800/80 border-l-4 flex items-center justify-between gap-2 ${colorClass}`}
+                          >
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-zinc-100 truncate">{fe.title}</p>
+                              <div className="flex items-center gap-2 mt-0.5 text-[11px] font-mono">
+                                <span>
+                                  {fe.startTime.slice(0, 5)} – {fe.endTime.slice(0, 5)}
+                                </span>
+                                {fe.location && (
+                                  <span className="flex items-center gap-0.5 text-zinc-400 font-sans text-[10px]">
+                                    <MapPin className="w-2.5 h-2.5" />
+                                    {fe.location}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={() => {
+                                  setEditingFixed(fe);
+                                  setIsAddFixedOpen(true);
+                                }}
+                                className="p-1 rounded text-zinc-400 hover:text-zinc-200"
+                                title="Edit"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteFixedEvent(fe.id)}
+                                className="p-1 rounded text-zinc-400 hover:text-red-400"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => {
-                                setEditingFixed(fe);
-                                setIsAddFixedOpen(true);
-                              }}
-                              className="p-1 rounded text-zinc-400 hover:text-zinc-200"
-                              title="Edit"
-                            >
-                              <Edit2 className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteFixedEvent(fe.id)}
-                              className="p-1 rounded text-zinc-400 hover:text-red-400"
-                              title="Delete"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <p className="text-xs text-zinc-500 italic py-4 text-center">No fixed events scheduled</p>

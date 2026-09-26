@@ -1,139 +1,138 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { FixedEvent, SchedulePreferences } from '@/lib/types';
+import { ParsedCandidateItem, DayOfWeek } from '@/lib/types';
 
-interface ParseScheduleTextResponse {
-  fixedEvents: {
-    title: string;
-    dayOfWeek: number;
-    startTime: string;
-    endTime: string;
-    category?: string;
-  }[];
-  preferences: {
-    wakeTime?: string;
-    sleepTime?: string;
-    peakEnergy?: 'morning' | 'afternoon' | 'evening' | 'night';
-    workoutPreference?: string;
-    focusDuration?: number;
-    summaryNotes?: string;
-  };
+interface LLMParsedItem {
+  title: string;
+  dayOfWeek: number; // 0-6
+  startTime: string; // "HH:MM"
+  endTime: string;   // "HH:MM"
+  location?: string;
+  color?: string;
+  type?: 'class' | 'task';
+  category?: string;
 }
 
-// Heuristic fallback parser if LLM keys are absent or API times out
-function heuristicParse(text: string): ParseScheduleTextResponse {
+// Regex / Heuristic fallback parser
+function heuristicParse(text: string): { candidates: LLMParsedItem[]; preferences: any } {
   const lower = text.toLowerCase();
-  const fixedEvents: ParseScheduleTextResponse['fixedEvents'] = [];
-  const preferences: ParseScheduleTextResponse['preferences'] = {};
+  const candidates: LLMParsedItem[] = [];
+  const preferences: any = {};
 
-  // Detect days of week
-  const dayMap: Record<string, number> = {
-    sunday: 0, sun: 0,
-    monday: 1, mon: 1,
-    tuesday: 2, tue: 2, tues: 2,
-    wednesday: 3, wed: 3,
-    thursday: 4, thu: 4, thur: 4, thurs: 4,
-    friday: 5, fri: 5,
-    saturday: 6, sat: 6,
+  const dayMap: Record<string, number[]> = {
+    sunday: [0], sun: [0],
+    monday: [1], mon: [1],
+    tuesday: [2], tue: [2], tues: [2],
+    wednesday: [3], wed: [3],
+    thursday: [4], thu: [4], thur: [4], thurs: [4],
+    friday: [5], fri: [5],
+    saturday: [6], sat: [6],
+    mwf: [1, 3, 5],
+    tt: [2, 4],
+    tth: [2, 4],
+    weekdays: [1, 2, 3, 4, 5],
+    daily: [0, 1, 2, 3, 4, 5, 6],
   };
 
-  // Detect chronotype / peak energy
-  if (lower.includes('night owl') || lower.includes('late night') || lower.includes('stay up late')) {
-    preferences.peakEnergy = 'night';
-    preferences.wakeTime = '09:30';
-    preferences.sleepTime = '01:30';
-  } else if (lower.includes('early bird') || lower.includes('morning person') || lower.includes('wake up early')) {
-    preferences.peakEnergy = 'morning';
-    preferences.wakeTime = '06:30';
-    preferences.sleepTime = '22:30';
-  } else if (lower.includes('afternoon')) {
-    preferences.peakEnergy = 'afternoon';
-  } else if (lower.includes('evening')) {
-    preferences.peakEnergy = 'evening';
-  }
+  // Helper time formatter
+  const formatTime = (t: string) => {
+    const isPm = t.toLowerCase().includes('pm');
+    const isAm = t.toLowerCase().includes('am');
+    const clean = t.replace(/(am|pm)/gi, '').trim();
+    const parts = clean.split(':');
+    let h = parseInt(parts[0], 10);
+    const m = parts[1] ? parseInt(parts[1], 10) : 0;
+    if (isPm && h < 12) h += 12;
+    if (isAm && h === 12) h = 0;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+  };
 
-  // Detect workout preferences
-  if (lower.includes('workout') || lower.includes('gym') || lower.includes('exercise')) {
-    if (lower.includes('evening') || lower.includes('night')) {
-      preferences.workoutPreference = 'evening (18:00–19:30)';
-    } else if (lower.includes('morning')) {
-      preferences.workoutPreference = 'morning (07:00–08:30)';
-    } else {
-      preferences.workoutPreference = 'afternoon';
+  // Check MWF pattern e.g. "gym every MWF 6am" or "gym MWF 6am to 7am"
+  const mwfRegex = /(?:every\s+)?(mwf|tt|tth|weekdays|daily)\s+(?:at\s+|from\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)(?:\s*(?:to|-)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?))?/gi;
+  let mwfMatch;
+  while ((mwfMatch = mwfRegex.exec(lower)) !== null) {
+    const days = dayMap[mwfMatch[1].toLowerCase()] || [1];
+    const startStr = mwfMatch[2];
+    let start = formatTime(startStr);
+    let end = mwfMatch[3] ? formatTime(mwfMatch[3]) : '';
+    if (!end) {
+      const [h, m] = start.split(':').map(Number);
+      end = `${((h + 1) % 24).toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
     }
-  }
-
-  // Simple regex for events like "gym every monday from 5pm to 6:30pm" or "physics class tuesdays 10:00 to 11:30"
-  const timeRegex = /(?:every\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)s?\s+(?:from\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*(?:to|-)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/gi;
-
-  let match;
-  while ((match = timeRegex.exec(lower)) !== null) {
-    const dayStr = match[1].toLowerCase();
-    const startStr = match[2];
-    const endStr = match[3];
-
-    const dayOfWeek = dayMap[dayStr];
-    if (dayOfWeek !== undefined) {
-      const formatTime = (t: string) => {
-        let isPm = t.toLowerCase().includes('pm');
-        let isAm = t.toLowerCase().includes('am');
-        let clean = t.replace(/(am|pm)/gi, '').trim();
-        let parts = clean.split(':');
-        let h = parseInt(parts[0], 10);
-        let m = parts[1] ? parseInt(parts[1], 10) : 0;
-        if (isPm && h < 12) h += 12;
-        if (isAm && h === 12) h = 0;
-        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-      };
-
-      fixedEvents.push({
-        title: 'Scheduled Commitment',
-        dayOfWeek,
-        startTime: formatTime(startStr),
-        endTime: formatTime(endStr),
-        category: 'Routine',
+    for (const d of days) {
+      candidates.push({
+        title: lower.includes('gym') ? 'Gym Workout' : 'Routine Commitment',
+        dayOfWeek: d,
+        startTime: start,
+        endTime: end,
+        type: 'class',
+        color: 'emerald',
+        category: lower.includes('gym') ? 'Fitness' : 'Routine',
       });
     }
   }
 
-  preferences.summaryNotes = text.slice(0, 300);
+  // Standard regex for "every tuesday 10am to 11:30am" or "club meeting thursdays 5pm"
+  const singleDayRegex = /(?:every\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)s?\s+(?:at\s+|from\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)(?:\s*(?:to|-)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?))?/gi;
+  let singleMatch;
+  while ((singleMatch = singleDayRegex.exec(lower)) !== null) {
+    const days = dayMap[singleMatch[1].toLowerCase()] || [1];
+    const startStr = singleMatch[2];
+    let start = formatTime(startStr);
+    let end = singleMatch[3] ? formatTime(singleMatch[3]) : '';
+    if (!end) {
+      const [h, m] = start.split(':').map(Number);
+      end = `${((h + 1) % 24).toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    }
+    const day = days[0];
+    let title = 'Meeting / Commitment';
+    if (lower.includes('club')) title = 'Club Meeting';
+    else if (lower.includes('lecture') || lower.includes('class')) title = 'Class Lecture';
+    else if (lower.includes('lab')) title = 'Lab Session';
 
-  return { fixedEvents, preferences };
+    candidates.push({
+      title,
+      dayOfWeek: day,
+      startTime: start,
+      endTime: end,
+      type: 'class',
+      color: 'indigo',
+      category: 'Commitment',
+    });
+  }
+
+  preferences.summary = text.slice(0, 200);
+  return { candidates, preferences };
 }
 
-async function callLLMParse(text: string): Promise<ParseScheduleTextResponse> {
+async function callLLMParse(text: string): Promise<{ candidates: LLMParsedItem[]; preferences: any }> {
   const geminiKey = process.env.GEMINI_API_KEY;
   const openaiKey = process.env.OPENAI_API_KEY;
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
 
   const prompt = `
-You are an intelligent schedule and habit assistant.
-Analyze the user's free-form description of their schedule, commitments, and energy habits:
+You are an intelligent scheduling parser for student & professional timetables.
+Analyze the user's natural language input:
 """
 ${text}
 """
 
-Extract:
-1. "fixedEvents": Array of any specific recurring commitments mentioned (e.g. classes, gym, meetings).
-   Each object MUST have:
-   - "title": Clean title (e.g. "Biology Lab", "Gym Workout", "Team Standup")
-   - "dayOfWeek": Integer 0 to 6 (0 = Sunday, 1 = Monday, 2 = Tuesday, 3 = Wednesday, 4 = Thursday, 5 = Friday, 6 = Saturday)
-   - "startTime": "HH:MM" 24-hour time (e.g. "09:00", "14:30")
-   - "endTime": "HH:MM" 24-hour time (e.g. "10:30", "16:00")
-   - "category": Short label e.g. "Class", "Fitness", "Work", "Personal"
+Extract all schedule items mentioned (classes, recurring meetings, gym, club sessions, study habits).
+For each item, determine:
+- "title": Concise, clean title (e.g. "Gym Workout", "Physics Lecture", "Club Meeting")
+- "dayOfWeek": Integer 0 to 6 (0 = Sunday, 1 = Monday, 2 = Tuesday, 3 = Wednesday, 4 = Thursday, 5 = Friday, 6 = Saturday).
+  If multiple days are specified (e.g. "MWF" or "every Tuesday and Thursday"), return separate entries for each day!
+- "startTime": "HH:MM" 24-hour format (e.g. "06:00", "14:30")
+- "endTime": "HH:MM" 24-hour format (e.g. "07:30", "16:00"). If end time is not stated, assume 1 hour duration.
+- "location": Optional string (e.g. "Gym", "Room 301", "Student Center", "Zoom")
+- "color": One of "indigo", "violet", "emerald", "amber", "rose", "sky"
+- "type": "class" (for recurring commitments/classes) or "task" (for one-off tasks/deadlines)
+- "category": Short label e.g. "Academics", "Fitness", "Club", "Work", "Personal"
 
-2. "preferences": Object extracting habits:
-   - "wakeTime": "HH:MM" (default "08:00" if unmentioned or infer from morning/night owl)
-   - "sleepTime": "HH:MM" (default "23:30" if unmentioned or infer)
-   - "peakEnergy": One of "morning" | "afternoon" | "evening" | "night"
-   - "workoutPreference": String note (e.g. "evening workouts")
-   - "focusDuration": Integer minutes (e.g. 45 or 50)
-   - "summaryNotes": Concise 1-sentence summary of stated habits
+Also extract "preferences" if mentioned (wakeTime, sleepTime, peakEnergy).
 
-Return ONLY valid JSON with keys "fixedEvents" and "preferences". No markdown backticks, no extra text.
+Return ONLY valid JSON with keys "candidates" (array of items) and "preferences" (object). No markdown ticks or explanation.
 `;
 
-  // 1. Try Gemini
   if (geminiKey) {
     try {
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
@@ -149,15 +148,17 @@ Return ONLY valid JSON with keys "fixedEvents" and "preferences". No markdown ba
         const data = await res.json();
         const rawContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (rawContent) {
-          return JSON.parse(rawContent.replace(/```json/g, '').replace(/```/g, '').trim());
+          const parsed = JSON.parse(rawContent.replace(/```json/g, '').replace(/```/g, '').trim());
+          if (Array.isArray(parsed.candidates)) {
+            return parsed;
+          }
         }
       }
     } catch (e) {
-      console.warn('Gemini schedule parsing failed:', e);
+      console.warn('Gemini NLP parsing failed:', e);
     }
   }
 
-  // 2. Try OpenAI
   if (openaiKey) {
     try {
       const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -175,14 +176,16 @@ Return ONLY valid JSON with keys "fixedEvents" and "preferences". No markdown ba
       if (res.ok) {
         const data = await res.json();
         const content = data.choices?.[0]?.message?.content;
-        if (content) return JSON.parse(content);
+        if (content) {
+          const parsed = JSON.parse(content);
+          if (Array.isArray(parsed.candidates)) return parsed;
+        }
       }
     } catch (e) {
-      console.warn('OpenAI schedule parsing failed:', e);
+      console.warn('OpenAI NLP parsing failed:', e);
     }
   }
 
-  // Fallback to heuristic parser
   return heuristicParse(text);
 }
 
@@ -195,77 +198,100 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { rawText } = await req.json();
+    const body = await req.json();
 
+    // 1. If this is a batch confirm & save request from the user review screen
+    if (body.action === 'confirm' && Array.isArray(body.items)) {
+      const confirmedItems: ParsedCandidateItem[] = body.items.filter((item: any) => item.selected !== false);
+      const insertedClasses = [];
+      const insertedDeadlines = [];
+
+      for (const item of confirmedItems) {
+        if (item.type === 'class') {
+          const payload = {
+            user_id: user.id,
+            title: item.title.trim(),
+            day_of_week: item.dayOfWeek,
+            start_time: item.startTime,
+            end_time: item.endTime,
+            location: item.location || null,
+            color: item.color || 'indigo',
+          };
+          let { data, error } = await supabase.from('fixed_classes').insert(payload).select().single();
+          if (error && error.code === '42P01') {
+            const fallback = await supabase.from('fixed_events').insert({
+              user_id: user.id,
+              title: item.title.trim(),
+              day_of_week: item.dayOfWeek,
+              start_time: item.startTime,
+              end_time: item.endTime,
+              category: item.category || 'Routine',
+            }).select().single();
+            data = fallback.data;
+          }
+          if (data) insertedClasses.push(data);
+        } else {
+          // One-off deadline/task
+          const today = new Date().toISOString().split('T')[0];
+          const payload = {
+            user_id: user.id,
+            title: item.title.trim(),
+            due_date: today,
+            due_time: item.startTime,
+            category: item.category || 'General',
+            priority: 'medium',
+            status: 'not_started',
+          };
+          let { data, error } = await supabase.from('deadlines').insert(payload).select().single();
+          if (error && error.code === '42P01') {
+            const fallback = await supabase.from('todos').insert({
+              user_id: user.id,
+              title: item.title.trim(),
+              due_date: `${today}T${item.startTime}:00Z`,
+              priority: 'medium',
+              completed: false,
+              category: item.category || 'General',
+            }).select().single();
+            data = fallback.data;
+          }
+          if (data) insertedDeadlines.push(data);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Saved ${insertedClasses.length} fixed class(es) and ${insertedDeadlines.length} task(s).`,
+        savedClassesCount: insertedClasses.length,
+        savedDeadlinesCount: insertedDeadlines.length,
+      });
+    }
+
+    // 2. Otherwise: parse text into candidates WITHOUT silently saving
+    const { rawText } = body;
     if (!rawText || typeof rawText !== 'string' || !rawText.trim()) {
       return NextResponse.json({ error: 'rawText is required' }, { status: 400 });
     }
 
-    const parsed = await callLLMParse(rawText.trim());
+    const { candidates, preferences } = await callLLMParse(rawText.trim());
 
-    // 1. Insert extracted fixed events
-    let insertedEvents: FixedEvent[] = [];
-    if (parsed.fixedEvents && parsed.fixedEvents.length > 0) {
-      const eventsToInsert = parsed.fixedEvents.map((e) => ({
-        user_id: user.id,
-        title: e.title || 'Scheduled Commitment',
-        day_of_week: e.dayOfWeek,
-        start_time: e.startTime,
-        end_time: e.endTime,
-        category: e.category || 'General',
-      }));
-
-      const { data: eventsData, error: eventErr } = await supabase
-        .from('fixed_events')
-        .insert(eventsToInsert)
-        .select();
-
-      if (!eventErr && eventsData) {
-        insertedEvents = eventsData.map((row) => ({
-          id: row.id,
-          userId: row.user_id,
-          title: row.title,
-          dayOfWeek: row.day_of_week,
-          startTime: row.start_time,
-          endTime: row.end_time,
-          category: row.category,
-        }));
-      }
-    }
-
-    // 2. Save / Update user schedule preferences
-    const preferencesPayload = {
-      wake_time: parsed.preferences?.wakeTime || '08:00',
-      sleep_time: parsed.preferences?.sleepTime || '23:30',
-      peak_energy: parsed.preferences?.peakEnergy || 'morning',
-      workout_preference: parsed.preferences?.workoutPreference || null,
-      focus_duration: parsed.preferences?.focusDuration || 45,
-      summary_notes: parsed.preferences?.summaryNotes || rawText.slice(0, 200),
-    };
-
-    const { data: prefData, error: prefErr } = await supabase
-      .from('user_schedule_preferences')
-      .upsert(
-        {
-          user_id: user.id,
-          raw_notes: rawText.trim(),
-          parsed_preferences: preferencesPayload,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id' }
-      )
-      .select()
-      .single();
-
-    if (prefErr) {
-      console.warn('Error saving schedule preferences:', prefErr);
-    }
+    const formattedCandidates: ParsedCandidateItem[] = (candidates || []).map((c, index) => ({
+      id: `candidate_${Date.now()}_${index}`,
+      title: c.title || 'Commitment',
+      dayOfWeek: (c.dayOfWeek !== undefined && c.dayOfWeek >= 0 && c.dayOfWeek <= 6 ? c.dayOfWeek : 1) as DayOfWeek,
+      startTime: c.startTime || '09:00',
+      endTime: c.endTime || '10:00',
+      location: c.location || '',
+      color: c.color || 'indigo',
+      type: c.type || 'class',
+      category: c.category || 'Commitment',
+      selected: true,
+    }));
 
     return NextResponse.json({
       success: true,
-      message: `Parsed successfully: ${insertedEvents.length} recurring commitment(s) added, habits updated.`,
-      addedEvents: insertedEvents,
-      preferences: prefData?.parsed_preferences || preferencesPayload,
+      candidates: formattedCandidates,
+      preferences: preferences || {},
+      rawText: rawText.trim(),
     });
   } catch (error: any) {
     console.error('Error in /api/schedule/parse-text:', error);

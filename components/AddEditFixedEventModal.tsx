@@ -1,14 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, Clock, Tag, Sparkles } from 'lucide-react';
-import { FixedEvent, DayOfWeek } from '@/lib/types';
+import { X, Calendar, Clock, MapPin, Palette } from 'lucide-react';
+import { FixedClass, DayOfWeek } from '@/lib/types';
 
 interface AddEditFixedEventModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (event: Omit<FixedEvent, 'id' | 'userId' | 'createdAt'> & { id?: string }) => Promise<void>;
-  editingEvent?: FixedEvent | null;
+  onSave: (event: Omit<FixedClass, 'id' | 'userId' | 'createdAt'> & { id?: string }) => Promise<void>;
+  editingEvent?: FixedClass | null;
 }
 
 const DAY_OPTIONS: { value: DayOfWeek; label: string }[] = [
@@ -21,7 +21,16 @@ const DAY_OPTIONS: { value: DayOfWeek; label: string }[] = [
   { value: 0, label: 'Sunday' },
 ];
 
-const CATEGORY_PRESETS = ['Class / Lecture', 'Work / Standup', 'Gym & Fitness', 'Study Group', 'Personal Routine'];
+const COLOR_OPTIONS = [
+  { value: 'indigo', label: 'Indigo', bg: 'bg-indigo-500', ring: 'ring-indigo-400' },
+  { value: 'violet', label: 'Violet', bg: 'bg-violet-500', ring: 'ring-violet-400' },
+  { value: 'emerald', label: 'Emerald', bg: 'bg-emerald-500', ring: 'ring-emerald-400' },
+  { value: 'amber', label: 'Amber', bg: 'bg-amber-500', ring: 'ring-amber-400' },
+  { value: 'rose', label: 'Rose', bg: 'bg-rose-500', ring: 'ring-rose-400' },
+  { value: 'sky', label: 'Sky Blue', bg: 'bg-sky-500', ring: 'ring-sky-400' },
+];
+
+const CATEGORY_PRESETS = ['Class / Lecture', 'Lab / Recitation', 'Gym & Fitness', 'Club / Meeting', 'Study Group', 'Personal'];
 
 export const AddEditFixedEventModal: React.FC<AddEditFixedEventModalProps> = ({
   isOpen,
@@ -33,6 +42,8 @@ export const AddEditFixedEventModal: React.FC<AddEditFixedEventModalProps> = ({
   const [dayOfWeek, setDayOfWeek] = useState<DayOfWeek>(1);
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('10:30');
+  const [location, setLocation] = useState('');
+  const [color, setColor] = useState('indigo');
   const [category, setCategory] = useState('Class / Lecture');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,12 +54,16 @@ export const AddEditFixedEventModal: React.FC<AddEditFixedEventModalProps> = ({
       setDayOfWeek(editingEvent.dayOfWeek);
       setStartTime(editingEvent.startTime.slice(0, 5));
       setEndTime(editingEvent.endTime.slice(0, 5));
+      setLocation(editingEvent.location || '');
+      setColor(editingEvent.color || 'indigo');
       setCategory(editingEvent.category || 'Class / Lecture');
     } else {
       setTitle('');
       setDayOfWeek(1);
       setStartTime('09:00');
       setEndTime('10:30');
+      setLocation('');
+      setColor('indigo');
       setCategory('Class / Lecture');
     }
     setError(null);
@@ -59,7 +74,7 @@ export const AddEditFixedEventModal: React.FC<AddEditFixedEventModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
-      setError('Please enter a title for the commitment');
+      setError('Please enter a title for the recurring class/commitment');
       return;
     }
     if (startTime >= endTime) {
@@ -76,11 +91,13 @@ export const AddEditFixedEventModal: React.FC<AddEditFixedEventModalProps> = ({
         dayOfWeek,
         startTime,
         endTime,
+        location: location.trim() || undefined,
+        color,
         category,
       });
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Failed to save commitment');
+      setError(err.message || 'Failed to save fixed class');
     } finally {
       setSaving(false);
     }
@@ -97,9 +114,9 @@ export const AddEditFixedEventModal: React.FC<AddEditFixedEventModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-zinc-100">
-                {editingEvent ? 'Edit Recurring Commitment' : 'Add Recurring Commitment'}
+                {editingEvent ? 'Edit Fixed Class / Commitment' : 'Add Fixed Recurring Class'}
               </h3>
-              <p className="text-xs text-zinc-400">Fixed non-negotiable class, gym, or meeting</p>
+              <p className="text-xs text-zinc-400">Locked commitment — timetable generator will never move this</p>
             </div>
           </div>
           <button
@@ -128,7 +145,7 @@ export const AddEditFixedEventModal: React.FC<AddEditFixedEventModalProps> = ({
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Physics 101 Lecture, Gym Push Day"
+              placeholder="e.g. Physics 101 Lecture, Algorithms Lab"
               className="w-full px-3.5 py-2.5 text-sm bg-zinc-950 rounded-xl border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30 transition-all"
             />
           </div>
@@ -154,31 +171,67 @@ export const AddEditFixedEventModal: React.FC<AddEditFixedEventModalProps> = ({
           {/* Times */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+              <label className="block text-xs font-semibold text-zinc-300 mb-1.5 flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5 text-zinc-400" />
                 Start Time <span className="text-violet-400">*</span>
               </label>
-              <div className="relative">
-                <input
-                  type="time"
-                  required
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-zinc-950 rounded-xl border border-zinc-800 text-zinc-100 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30 transition-all"
-                />
-              </div>
+              <input
+                type="time"
+                required
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className="w-full px-3 py-2 text-sm bg-zinc-950 rounded-xl border border-zinc-800 text-zinc-100 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30 transition-all"
+              />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+              <label className="block text-xs font-semibold text-zinc-300 mb-1.5 flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5 text-zinc-400" />
                 End Time <span className="text-violet-400">*</span>
               </label>
-              <div className="relative">
-                <input
-                  type="time"
-                  required
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-zinc-950 rounded-xl border border-zinc-800 text-zinc-100 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30 transition-all"
-                />
+              <input
+                type="time"
+                required
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                className="w-full px-3 py-2 text-sm bg-zinc-950 rounded-xl border border-zinc-800 text-zinc-100 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30 transition-all"
+              />
+            </div>
+          </div>
+
+          {/* Location & Color */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-zinc-300 mb-1.5 flex items-center gap-1">
+                <MapPin className="w-3.5 h-3.5 text-zinc-400" />
+                Location (optional)
+              </label>
+              <input
+                type="text"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="e.g. Hall B, Room 402, Zoom"
+                className="w-full px-3 py-2 text-sm bg-zinc-950 rounded-xl border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30 transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-zinc-300 mb-1.5 flex items-center gap-1">
+                <Palette className="w-3.5 h-3.5 text-zinc-400" />
+                Color Theme
+              </label>
+              <div className="flex items-center gap-2 pt-1">
+                {COLOR_OPTIONS.map((col) => (
+                  <button
+                    key={col.value}
+                    type="button"
+                    title={col.label}
+                    onClick={() => setColor(col.value)}
+                    className={`w-6 h-6 rounded-full ${col.bg} transition-all ${
+                      color === col.value
+                        ? 'ring-2 ring-white ring-offset-2 ring-offset-zinc-900 scale-110'
+                        : 'opacity-70 hover:opacity-100'
+                    }`}
+                  />
+                ))}
               </div>
             </div>
           </div>
@@ -186,7 +239,7 @@ export const AddEditFixedEventModal: React.FC<AddEditFixedEventModalProps> = ({
           {/* Category Presets */}
           <div>
             <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Category</label>
-            <div className="flex flex-wrap gap-1.5 mb-2">
+            <div className="flex flex-wrap gap-1.5 mb-1">
               {CATEGORY_PRESETS.map((cat) => (
                 <button
                   key={cat}
@@ -216,9 +269,9 @@ export const AddEditFixedEventModal: React.FC<AddEditFixedEventModalProps> = ({
             <button
               type="submit"
               disabled={saving}
-              className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-semibold shadow-lg shadow-violet-600/20 active:scale-95 transition-all disabled:opacity-50"
+              className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-semibold shadow-lg shadow-violet-600/20 active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
             >
-              {saving ? 'Saving...' : editingEvent ? 'Update Commitment' : 'Add Commitment'}
+              {saving ? 'Saving...' : editingEvent ? 'Update Class' : 'Save Fixed Class'}
             </button>
           </div>
         </form>

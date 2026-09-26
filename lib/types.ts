@@ -90,51 +90,106 @@ export type AppTab = 'vault' | 'news' | 'schedule';
 
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0 = Sunday, 1 = Monday...
 
-export interface FixedEvent {
+export interface FixedClass {
   id: string;
   userId?: string;
   title: string;
   dayOfWeek: DayOfWeek;
   startTime: string; // "HH:MM"
   endTime: string;   // "HH:MM"
+  location?: string | null;
+  color?: string;    // e.g. "indigo", "violet", "emerald", "amber", "rose", "sky"
   category?: string;
   createdAt?: string;
 }
+export type FixedEvent = FixedClass;
 
-export type TodoPriority = 'high' | 'medium' | 'low';
+export type DeadlineStatus = 'not_started' | 'in_progress' | 'done';
+export type PriorityLevel = 'high' | 'medium' | 'low';
+export type TodoPriority = PriorityLevel;
 
-export interface TodoItem {
+export interface Deadline {
   id: string;
   userId?: string;
   title: string;
-  dueDate?: string | null;
-  priority: TodoPriority;
-  estimatedDuration: number; // minutes
-  completed: boolean;
+  description?: string | null;
+  dueDate: string;    // "YYYY-MM-DD"
+  dueTime?: string | null; // "HH:MM"
+  category?: string | null; // Subject or category
+  status?: DeadlineStatus;
+  priority: PriorityLevel;
+  estimatedDuration?: number; // minutes
+  // compatibility fields
+  completed?: boolean;
   completedAt?: string | null;
-  category?: string;
   createdAt?: string;
+  updatedAt?: string;
 }
+export type TodoItem = Deadline;
 
-export type ScheduleBlockType = 'fixed' | 'todo' | 'routine' | 'break' | 'meal';
+export type ScheduleBlockType = 'class' | 'study' | 'task' | 'break' | 'free' | 'fixed' | 'todo' | 'routine' | 'meal';
+export type EnergyLevel = 'low' | 'medium' | 'high';
+export type BlockStatus = 'planned' | 'completed' | 'skipped';
 
-export interface ScheduleBlock {
+export interface ScheduleBlockItem {
   id: string;
+  userId?: string;
+  date?: string;       // "YYYY-MM-DD"
+  startTime: string;  // "HH:MM"
+  endTime: string;    // "HH:MM"
   title: string;
-  startTime: string; // "HH:MM"
-  endTime: string;   // "HH:MM"
   type: ScheduleBlockType;
+  linkedDeadlineId?: string | null;
+  todoId?: string;    // compatibility alias for linkedDeadlineId
+  energyLevelRequired?: EnergyLevel | null;
+  status?: BlockStatus;
   category?: string;
-  todoId?: string;
-  priority?: TodoPriority;
+  priority?: PriorityLevel;
   reason?: string;
   isCompleted?: boolean;
   isSkipped?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+export type ScheduleBlock = ScheduleBlockItem;
+
+export interface EnergyLog {
+  id: string;
+  userId?: string;
+  date: string;       // "YYYY-MM-DD"
+  timeBlock: string;  // "09:00-10:00" or start time
+  energyLevel: EnergyLevel;
+  derivedScore?: number | null;
+  createdAt?: string;
+}
+
+export interface StreakRecord {
+  id: string;
+  userId?: string;
+  streakType: 'daily_adherence' | 'category';
+  category?: string | null;
+  currentStreak: number;
+  longestStreak: number;
+  lastCompletedDate?: string | null;
+  updatedAt?: string;
+}
+
+export interface ParsedCandidateItem {
+  id: string;
+  title: string;
+  dayOfWeek: DayOfWeek;
+  startTime: string;
+  endTime: string;
+  location?: string;
+  color?: string;
+  type: 'class' | 'task';
+  category?: string;
+  selected: boolean;
 }
 
 export interface ScheduleConflict {
-  event1: FixedEvent;
-  event2: FixedEvent;
+  event1: FixedClass;
+  event2: FixedClass;
   overlapMinutes: number;
   message: string;
 }
@@ -152,7 +207,7 @@ export interface GeneratedSchedule {
   id: string;
   userId?: string;
   scheduleDate: string; // "YYYY-MM-DD"
-  blocks: ScheduleBlock[];
+  blocks: ScheduleBlockItem[];
   summary?: string;
   conflicts?: ScheduleConflict[];
   createdAt?: string;
@@ -161,7 +216,7 @@ export interface GeneratedSchedule {
 export interface ScheduleCompletion {
   id: string;
   userId?: string;
-  scheduleId: string;
+  scheduleId?: string;
   blockId: string;
   date: string;
   status: 'completed' | 'skipped' | 'pending';
@@ -175,6 +230,8 @@ export interface ScheduleStats {
   weeklyCompletionRate: number; // 0 - 100
   completedBlocksCount: number;
   totalBlocksCount: number;
+  categoryStreaks?: Record<string, number>;
 }
+
 
 
