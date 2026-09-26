@@ -20,6 +20,8 @@ import {
   Newspaper,
   Calendar,
   CalendarClock,
+  HelpCircle,
+  CheckSquare,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -32,6 +34,9 @@ interface NavbarProps {
   onOpenAddModal: () => void;
   onOpenBulkModal: () => void;
   onOpenBackupModal: () => void;
+  onOpenShortcutsModal?: () => void;
+  isSelectMode?: boolean;
+  onToggleSelectMode?: () => void;
   totalResources: number;
   user: User | null;
   onOpenAuthModal: (mode?: 'login' | 'signup') => void;
@@ -48,6 +53,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAddModal,
   onOpenBulkModal,
   onOpenBackupModal,
+  onOpenShortcutsModal,
+  isSelectMode,
+  onToggleSelectMode,
   totalResources,
   user,
   onOpenAuthModal,
@@ -231,6 +239,32 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             </div>
 
+            {/* Multi-Select Toggle Button */}
+            <button
+              type="button"
+              onClick={onToggleSelectMode}
+              className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                isSelectMode
+                  ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-600/30'
+                  : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80 border-zinc-800/80'
+              }`}
+              title={isSelectMode ? 'Exit Select Mode (s)' : 'Select Multiple Resources (s)'}
+              aria-label="Toggle multi-select mode"
+            >
+              <CheckSquare className="w-4 h-4" />
+            </button>
+
+            {/* Shortcuts Help Button */}
+            <button
+              type="button"
+              onClick={onOpenShortcutsModal}
+              className="p-2 rounded-xl text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80 border border-zinc-800/80 transition-all cursor-pointer"
+              title="Keyboard Shortcuts (?)"
+              aria-label="Keyboard Shortcuts"
+            >
+              <HelpCircle className="w-4 h-4" />
+            </button>
+
             {/* Backup / Export Button */}
             <button
               type="button"
@@ -367,6 +401,32 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <List className="w-3.5 h-3.5" />
                 </button>
               </div>
+
+              {/* Multi-Select Mode */}
+              <button
+                type="button"
+                onClick={onToggleSelectMode}
+                className={`min-w-[34px] min-h-[34px] p-2 rounded-lg border flex items-center justify-center cursor-pointer transition-all ${
+                  isSelectMode
+                    ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm'
+                    : 'bg-zinc-900 text-zinc-400 border-zinc-800'
+                }`}
+                title="Select Mode"
+                aria-label="Select Mode"
+              >
+                <CheckSquare className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Shortcuts Help */}
+              <button
+                type="button"
+                onClick={onOpenShortcutsModal}
+                className="min-w-[34px] min-h-[34px] p-2 rounded-lg bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800 flex items-center justify-center cursor-pointer"
+                title="Shortcuts (?)"
+                aria-label="Shortcuts"
+              >
+                <HelpCircle className="w-3.5 h-3.5" />
+              </button>
 
               {/* Bulk Import */}
               <button

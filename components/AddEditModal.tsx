@@ -12,6 +12,7 @@ interface AddEditModalProps {
   onSave: (resourceData: Omit<Resource, 'id' | 'createdAt' | 'updatedAt'> | Resource) => void;
   existingCategories: string[];
   existingTags: string[];
+  existingResources?: Resource[];
   editingResource?: Resource | null;
 }
 
@@ -21,6 +22,7 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
   onSave,
   existingCategories,
   existingTags,
+  existingResources = [],
   editingResource,
 }) => {
   const [url, setUrl] = useState('');
@@ -33,9 +35,28 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<{ url?: string; title?: string }>({});
   const [isFetchingMeta, setIsFetchingMeta] = useState(false);
+  const [targetUpdateId, setTargetUpdateId] = useState<string | null>(null);
+  const [forceAllowDuplicate, setForceAllowDuplicate] = useState(false);
+
+  // Detect duplicate URL
+  const duplicateMatch = React.useMemo(() => {
+    if (!url.trim() || forceAllowDuplicate) return null;
+    const norm = normalizeUrl(url);
+    if (!norm) return null;
+    return (
+      existingResources.find(
+        (r) =>
+          r.id !== editingResource?.id &&
+          r.id !== targetUpdateId &&
+          normalizeUrl(r.url) === norm
+      ) || null
+    );
+  }, [url, existingResources, editingResource, targetUpdateId, forceAllowDuplicate]);
 
   // Populate form when editing or resetting
   useEffect(() => {
+    setTargetUpdateId(null);
+    setForceAllowDuplicate(false);
     if (editingResource) {
       setUrl(editingResource.url);
       setTitle(editingResource.title);
@@ -176,9 +197,11 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
       ? (newCategoryInput.trim() || 'General')
       : (category.trim() || 'General');
 
-    const resourcePayload = editingResource
+    const updateBase = editingResource || (targetUpdateId ? existingResources.find((r) => r.id === targetUpdateId) : null);
+
+    const resourcePayload = updateBase
       ? {
-          ...editingResource,
+          ...updateBase,
           url: normalized,
           title: finalTitle,
           category: finalCategory,
@@ -208,7 +231,7 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
               <LinkIcon className="w-4 h-4" />
             </div>
             <h2 className="text-base sm:text-lg font-bold text-zinc-100">
-              {editingResource ? 'Edit Resource' : 'Add New Resource'}
+              {editingResource || targetUpdateId ? 'Edit Resource' : 'Add New Resource'}
             </h2>
           </div>
           <button
@@ -224,6 +247,52 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
         {/* Modal Form Body */}
         <form onSubmit={handleSubmit} className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
           
+          {/* Duplicate Warning Banner */}
+          {duplicateMatch && (
+            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-2.5 animate-in fade-in duration-150">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-amber-200">
+                    Duplicate Link Found in Vault!
+                  </p>
+                  <p className="text-zinc-300 mt-0.5 leading-relaxed">
+                    This URL matches <strong className="text-white">&quot;{duplicateMatch.title}&quot;</strong> in folder <strong className="text-indigo-300">&quot;{duplicateMatch.category}&quot;</strong>.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 pt-1 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTargetUpdateId(duplicateMatch.id);
+                    setTitle(duplicateMatch.title);
+                    setCategory(duplicateMatch.category);
+                    setTags(duplicateMatch.tags || []);
+                    setNotes(duplicateMatch.notes || '');
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium cursor-pointer shadow-sm active:scale-95"
+                >
+                  Update Existing Entry
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium cursor-pointer"
+                >
+                  Skip &amp; Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForceAllowDuplicate(true)}
+                  className="text-zinc-400 hover:text-zinc-200 text-[11px] underline ml-auto cursor-pointer"
+                >
+                  Add duplicate anyway
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* URL Field (Required) */}
           <div>
             <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">

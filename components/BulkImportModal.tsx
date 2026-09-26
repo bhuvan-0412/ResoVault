@@ -352,23 +352,40 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                   Extracted <strong className="text-white">{reviewItems.length}</strong> links
                 </span>
                 {duplicateCount > 0 && (
-                  <span className="inline-flex items-center gap-1 text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md font-medium">
-                    <AlertTriangle className="w-3 h-3" /> {duplicateCount} duplicate(s) flagged (unchecked)
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md font-medium">
+                      <AlertTriangle className="w-3 h-3" /> {duplicateCount} duplicate(s) flagged
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReviewItems(
+                          reviewItems.map((item) =>
+                            item.isDuplicate ? { ...item, selected: false } : item
+                          )
+                        );
+                      }}
+                      className="text-[11px] text-amber-300 hover:text-amber-200 underline cursor-pointer"
+                    >
+                      Skip all duplicates
+                    </button>
+                  </div>
                 )}
               </div>
 
               <div className="flex items-center gap-2">
                 <button
+                  type="button"
                   onClick={() => handleToggleSelectAll(true)}
-                  className="text-indigo-400 hover:text-indigo-300 font-medium"
+                  className="text-indigo-400 hover:text-indigo-300 font-medium cursor-pointer"
                 >
                   Select All
                 </button>
                 <span className="text-zinc-600">•</span>
                 <button
+                  type="button"
                   onClick={() => handleToggleSelectAll(false)}
-                  className="text-zinc-400 hover:text-zinc-200 font-medium"
+                  className="text-zinc-400 hover:text-zinc-200 font-medium cursor-pointer"
                 >
                   Deselect All
                 </button>

@@ -14,6 +14,10 @@ interface ResourceCardProps {
   onCopySuccess?: () => void;
   onTagClick?: (tag: string) => void;
   onCategoryClick?: (category: string) => void;
+  isSelectMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (id: string) => void;
+  isFocused?: boolean;
 }
 
 export const ResourceCard: React.FC<ResourceCardProps> = ({
@@ -25,6 +29,10 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
   onCopySuccess,
   onTagClick,
   onCategoryClick,
+  isSelectMode,
+  isSelected,
+  onToggleSelect,
+  isFocused,
 }) => {
   const [copied, setCopied] = useState(false);
   const domain = getDomain(resource.url);
@@ -100,15 +108,40 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
   return (
     <div
       className={`group relative bg-zinc-900/90 hover:bg-zinc-900 border rounded-2xl p-4 sm:p-4.5 transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-xl hover:shadow-indigo-500/10 flex flex-col justify-between ${
-        resource.isPinned
+        isFocused
+          ? 'ring-2 ring-indigo-500 border-indigo-500 shadow-xl shadow-indigo-500/20'
+          : resource.isPinned
           ? 'border-amber-500/40 bg-gradient-to-b from-amber-500/[0.04] to-zinc-900/90 ring-1 ring-amber-500/25 shadow-md shadow-amber-500/5'
           : 'border-zinc-800/80 hover:border-zinc-700/90'
-      }`}
+      } ${isSelected ? 'bg-indigo-950/20 border-indigo-500/50' : ''}`}
     >
       <div>
         {/* Header: Icon, Category & Actions */}
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex items-center gap-2.5 min-w-0">
+            {/* Select Checkbox in Bulk Mode */}
+            {isSelectMode && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleSelect?.(resource.id);
+                }}
+                className="p-1 rounded-lg text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer shrink-0"
+                aria-label={isSelected ? 'Deselect resource' : 'Select resource'}
+              >
+                <div
+                  className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${
+                    isSelected
+                      ? 'bg-indigo-600 border-indigo-500 text-white shadow-sm'
+                      : 'border-zinc-600 bg-zinc-800 hover:border-zinc-400'
+                  }`}
+                >
+                  {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                </div>
+              </button>
+            )}
+
             {renderDomainBadge()}
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">

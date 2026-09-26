@@ -10,6 +10,8 @@ export interface ToastItem {
   type: ToastType;
   message: string;
   subtext?: string;
+  durationMs?: number;
+  undoAction?: () => void;
 }
 
 interface ToastProps {
@@ -35,11 +37,12 @@ const ToastMessage: React.FC<{ toast: ToastItem; onDismiss: (id: string) => void
   onDismiss,
 }) => {
   useEffect(() => {
+    const duration = toast.durationMs || (toast.undoAction ? 5000 : 2800);
     const timer = setTimeout(() => {
       onDismiss(toast.id);
-    }, 2800);
+    }, duration);
     return () => clearTimeout(timer);
-  }, [toast.id, onDismiss]);
+  }, [toast.id, toast.durationMs, toast.undoAction, onDismiss]);
 
   const renderIcon = () => {
     switch (toast.type) {
@@ -85,12 +88,28 @@ const ToastMessage: React.FC<{ toast: ToastItem; onDismiss: (id: string) => void
           {toast.subtext && <p className="text-[11px] text-zinc-400 truncate">{toast.subtext}</p>}
         </div>
       </div>
-      <button
-        onClick={() => onDismiss(toast.id)}
-        className="p-1 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/80 transition-colors shrink-0 cursor-pointer"
-      >
-        <X className="w-3.5 h-3.5" />
-      </button>
+      <div className="flex items-center gap-1.5 shrink-0">
+        {toast.undoAction && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              toast.undoAction?.();
+              onDismiss(toast.id);
+            }}
+            className="px-2.5 py-1 text-xs font-bold text-amber-300 hover:text-white bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded-lg transition-all cursor-pointer shadow-sm active:scale-95"
+          >
+            Undo
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => onDismiss(toast.id)}
+          className="p-1 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/80 transition-colors cursor-pointer"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
     </div>
   );
 };

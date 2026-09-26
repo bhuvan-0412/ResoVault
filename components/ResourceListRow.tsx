@@ -14,6 +14,10 @@ interface ResourceListRowProps {
   onCopySuccess?: () => void;
   onTagClick?: (tag: string) => void;
   onCategoryClick?: (category: string) => void;
+  isSelectMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (id: string) => void;
+  isFocused?: boolean;
 }
 
 export const ResourceListRow: React.FC<ResourceListRowProps> = ({
@@ -25,6 +29,10 @@ export const ResourceListRow: React.FC<ResourceListRowProps> = ({
   onCopySuccess,
   onTagClick,
   onCategoryClick,
+  isSelectMode,
+  isSelected,
+  onToggleSelect,
+  isFocused,
 }) => {
   const [copied, setCopied] = useState(false);
   const domain = getDomain(resource.url);
@@ -47,13 +55,37 @@ export const ResourceListRow: React.FC<ResourceListRowProps> = ({
   return (
     <div
       className={`group border rounded-xl p-3.5 sm:px-4 sm:py-3 transition-all duration-150 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-        resource.isPinned
+        isFocused
+          ? 'ring-2 ring-indigo-500 border-indigo-500 shadow-md shadow-indigo-500/20'
+          : resource.isPinned
           ? 'bg-zinc-900/95 border-amber-500/40 ring-1 ring-amber-500/20 shadow-md'
           : 'bg-zinc-900/80 hover:bg-zinc-900 border-zinc-800/80 hover:border-zinc-700/80 hover:shadow-md'
-      }`}
+      } ${isSelected ? 'bg-indigo-950/20 border-indigo-500/50' : ''}`}
     >
       {/* Title & Domain Info */}
       <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+        {/* Select Mode Checkbox */}
+        {isSelectMode && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSelect?.(resource.id);
+            }}
+            className="p-0.5 rounded text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer shrink-0 mt-0.5 sm:mt-0"
+            aria-label={isSelected ? 'Deselect resource' : 'Select resource'}
+          >
+            <div
+              className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${
+                isSelected
+                  ? 'bg-indigo-600 border-indigo-500 text-white shadow-sm'
+                  : 'border-zinc-600 bg-zinc-800 hover:border-zinc-400'
+              }`}
+            >
+              {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+            </div>
+          </button>
+        )}
         {faviconUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img

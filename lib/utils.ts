@@ -33,14 +33,57 @@ export function getDomainType(urlStr: string): 'github' | 'drive' | 'gdocs' | 'y
   return 'generic';
 }
 
-// Normalize URL (add https:// if missing)
+const TRACKING_PARAMS = new Set([
+  'utm_source',
+  'utm_medium',
+  'utm_campaign',
+  'utm_term',
+  'utm_content',
+  'fbclid',
+  'gclid',
+  'igshid',
+  'mc_cid',
+  'mc_eid',
+  'ref',
+  'ref_src',
+  'si', // YouTube share tracking parameter
+]);
+
+// Normalize URL (strip tracking params, lowercase hostname, remove trailing slashes)
 export function normalizeUrl(urlInput: string): string {
   let trimmed = urlInput.trim();
   if (!trimmed) return '';
   if (!/^https?:\/\//i.test(trimmed)) {
     trimmed = `https://${trimmed}`;
   }
-  return trimmed;
+
+  try {
+    const parsed = new URL(trimmed);
+    parsed.hostname = parsed.hostname.toLowerCase();
+
+    // Strip common tracking query parameters
+    const keysToDelete: string[] = [];
+    parsed.searchParams.forEach((_, key) => {
+      const lowerKey = key.toLowerCase();
+      if (TRACKING_PARAMS.has(lowerKey) || lowerKey.startsWith('utm_')) {
+        keysToDelete.push(key);
+      }
+    });
+    keysToDelete.forEach((k) => parsed.searchParams.delete(k));
+
+    // Remove trailing slash on pathnames (except single root slash if no query)
+    if (parsed.pathname.length > 1 && parsed.pathname.endsWith('/')) {
+      parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+    }
+
+    let result = parsed.toString();
+    if (result.endsWith('/') && parsed.pathname === '/' && !parsed.search && !parsed.hash) {
+      result = result.slice(0, -1);
+    }
+    return result;
+  } catch {
+    return trimmed.replace(/\/+$/, '');
+  }
 }
 
 // Clean slate default resources array

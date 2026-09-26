@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Navbar } from '@/components/Navbar';
 import { CategoryOverview } from '@/components/CategoryOverview';
 import { ResourceCard } from '@/components/ResourceCard';
@@ -15,6 +15,9 @@ import { NewsDigestTab } from '@/components/NewsDigestTab';
 import { ScheduleTab } from '@/components/ScheduleTab';
 import { ToastContainer, ToastItem } from '@/components/Toast';
 import { ResourceSkeleton } from '@/components/ResourceSkeleton';
+import { ShortcutsModal } from '@/components/ShortcutsModal';
+import { BulkActionsBar } from '@/components/BulkActionsBar';
+import { RecentShelf } from '@/components/RecentShelf';
 import { Resource, ViewMode, SortOption, CategoryStat, User, AppTab, NewsArticle } from '@/lib/types';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import Fuse from 'fuse.js';
@@ -23,6 +26,9 @@ import {
   createResource,
   updateResource,
   deleteResource,
+  bulkDeleteResources,
+  bulkUpdateCategory,
+  bulkModifyTag,
   bulkSaveResources,
   fetchCategories,
   DEFAULT_STARTING_CATEGORIES,
@@ -67,14 +73,34 @@ export default function Home() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
+
+  // Bulk selection state
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Keyboard navigation focus index in filteredResources
+  const [focusedIndex, setFocusedIndex] = useState<number>(-1);
+
+  // Pending deletions map for Undo capability: deletionKey -> { timer, items }
+  const pendingDeletionsRef = useRef<Map<string, { timer: NodeJS.Timeout; items: Resource[] }>>(new Map());
 
   // Toast notifications state
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-  const showToast = useCallback((message: string, type: ToastItem['type'] = 'success', subtext?: string) => {
-    const id = `toast-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    setToasts((prev) => [...prev, { id, message, type, subtext }]);
-  }, []);
+  const showToast = useCallback(
+    (
+      message: string,
+      type: ToastItem['type'] = 'success',
+      subtext?: string,
+      undoAction?: () => void,
+      durationMs?: number
+    ) => {
+      const id = `toast-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      setToasts((prev) => [...prev, { id, message, type, subtext, undoAction, durationMs }]);
+    },
+    []
+  );
 
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -393,16 +419,385 @@ export default function Home() {
     fetchCategories().then(setUserCategories).catch(console.warn);
   };
 
-  const handleDeleteConfirm = async () => {
+  // Delete single resource with 5-second Undo grace period
+  const handleDeleteConfirm = () => {
     if (!deletingId || !user) return;
-    const success = await deleteResource(deletingId);
-    if (success) {
-      setResources((prev) => prev.filter((r) => r.id !== deletingId));
-      showToast('Resource removed from vault', 'delete');
-    }
+    const targetId = deletingId;
+    const itemToDelete = resources.find((r) => r.id === targetId);
     setDeletingId(null);
-    fetchCategories().then(setUserCategories).catch(console.warn);
+
+    // Optimistically remove from state immediately
+    setResources((prev) => prev.filter((r) => r.id !== targetId));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(targetId);
+      return next;
+    });
+
+    const undoKey = `delete-${targetId}-${Date.now()}`;
+    const timer = setTimeout(async () => {
+      pendingDeletionsRef.current.delete(undoKey);
+      try {
+        await deleteResource(targetId);
+        fetchCategories().then(setUserCategories).catch(console.warn);
+      } catch (err) {
+        console.warn('Failed to delete on Supabase:', err);
+      }
+    }, 5000);
+
+    const handleUndo = () => {
+      clearTimeout(timer);
+      pendingDeletionsRef.current.delete(undoKey);
+      if (itemToDelete) {
+        setResources((prev) => [itemToDelete, ...prev]);
+        showToast('Resource restored', 'success');
+      }
+    };
+
+    pendingDeletionsRef.current.set(undoKey, { timer, items: itemToDelete ? [itemToDelete] : [] });
+
+    showToast(
+      'Resource removed from vault',
+      'delete',
+      undefined,
+      handleUndo,
+      5000
+    );
   };
+
+  // Bulk action handlers
+  const handleToggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleSelectAll = useCallback(() => {
+    setSelectedIds(new Set(filteredResources.map((r) => r.id)));
+  }, [filteredResources]);
+
+  const handleDeselectAll = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleBulkRecategorize = useCallback(
+    async (category: string) => {
+      const ids = Array.from(selectedIds);
+      if (ids.length === 0 || !user) return;
+
+      const cleanCat = category.trim();
+      setResources((prev) =>
+        prev.map((r) => (selectedIds.has(r.id) ? { ...r, category: cleanCat } : r))
+      );
+      showToast(`Moved ${ids.length} resources to "${cleanCat}"`, 'success');
+      try {
+        await bulkUpdateCategory(ids, cleanCat);
+        fetchCategories().then(setUserCategories).catch(console.warn);
+      } catch (err) {
+        console.warn('Failed to bulk recategorize:', err);
+      }
+    },
+    [selectedIds, user, showToast]
+  );
+
+  const handleBulkAddTag = useCallback(
+    async (tag: string) => {
+      const ids = Array.from(selectedIds);
+      if (ids.length === 0 || !user) return;
+
+      const cleanTag = tag.trim().toLowerCase();
+      setResources((prev) =>
+        prev.map((r) => {
+          if (!selectedIds.has(r.id)) return r;
+          const current = r.tags || [];
+          if (current.map((t) => t.toLowerCase()).includes(cleanTag)) return r;
+          return { ...r, tags: [...current, cleanTag] };
+        })
+      );
+      showToast(`Added tag #${cleanTag} to ${ids.length} resources`, 'success');
+      try {
+        await bulkModifyTag(resources, ids, cleanTag, 'add');
+      } catch (err) {
+        console.warn('Failed to bulk add tag:', err);
+      }
+    },
+    [selectedIds, user, resources, showToast]
+  );
+
+  const handleBulkRemoveTag = useCallback(
+    async (tag: string) => {
+      const ids = Array.from(selectedIds);
+      if (ids.length === 0 || !user) return;
+
+      const cleanTag = tag.trim().toLowerCase();
+      setResources((prev) =>
+        prev.map((r) => {
+          if (!selectedIds.has(r.id)) return r;
+          return {
+            ...r,
+            tags: (r.tags || []).filter((t) => t.toLowerCase() !== cleanTag),
+          };
+        })
+      );
+      showToast(`Removed tag #${cleanTag} from ${ids.length} resources`, 'success');
+      try {
+        await bulkModifyTag(resources, ids, cleanTag, 'remove');
+      } catch (err) {
+        console.warn('Failed to bulk remove tag:', err);
+      }
+    },
+    [selectedIds, user, resources, showToast]
+  );
+
+  const handleBulkDelete = useCallback(() => {
+    const idsToDelete = Array.from(selectedIds);
+    if (idsToDelete.length === 0 || !user) return;
+
+    const itemsToDelete = resources.filter((r) => selectedIds.has(r.id));
+    const count = itemsToDelete.length;
+
+    // Optimistically remove from state immediately
+    setResources((prev) => prev.filter((r) => !selectedIds.has(r.id)));
+    setSelectedIds(new Set());
+    setIsSelectMode(false);
+
+    const undoKey = `bulk-delete-${Date.now()}`;
+    const timer = setTimeout(async () => {
+      pendingDeletionsRef.current.delete(undoKey);
+      try {
+        await bulkDeleteResources(idsToDelete);
+        fetchCategories().then(setUserCategories).catch(console.warn);
+      } catch (err) {
+        console.warn('Failed to bulk delete on Supabase:', err);
+      }
+    }, 5000);
+
+    const handleUndo = () => {
+      clearTimeout(timer);
+      pendingDeletionsRef.current.delete(undoKey);
+      setResources((prev) => [...itemsToDelete, ...prev]);
+      showToast(`Restored ${count} resource${count !== 1 ? 's' : ''}`, 'success');
+    };
+
+    pendingDeletionsRef.current.set(undoKey, { timer, items: itemsToDelete });
+
+    showToast(
+      `Deleted ${count} resource${count !== 1 ? 's' : ''}`,
+      'delete',
+      undefined,
+      handleUndo,
+      5000
+    );
+  }, [selectedIds, user, resources, showToast]);
+
+  // Reset keyboard focus when search or filters change
+  useEffect(() => {
+    setFocusedIndex(-1);
+  }, [searchQuery, activeCategory, selectedTags, sortOption]);
+
+  // Global Keyboard Shortcuts Listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = (document.activeElement?.tagName || '').toUpperCase();
+      const isInputFocused =
+        activeTag === 'INPUT' ||
+        activeTag === 'TEXTAREA' ||
+        activeTag === 'SELECT' ||
+        (document.activeElement as HTMLElement)?.isContentEditable;
+
+      // Esc closes any open modal or exits select mode or resets focus
+      if (e.key === 'Escape') {
+        if (isShortcutsModalOpen) {
+          setIsShortcutsModalOpen(false);
+          return;
+        }
+        if (isAddModalOpen) {
+          setIsAddModalOpen(false);
+          setEditingResource(null);
+          return;
+        }
+        if (isBulkModalOpen) {
+          setIsBulkModalOpen(false);
+          return;
+        }
+        if (isBackupModalOpen) {
+          setIsBackupModalOpen(false);
+          return;
+        }
+        if (deletingId) {
+          setDeletingId(null);
+          return;
+        }
+        if (isAuthModalOpen) {
+          setIsAuthModalOpen(false);
+          return;
+        }
+        if (isSelectMode) {
+          setIsSelectMode(false);
+          setSelectedIds(new Set());
+          return;
+        }
+        if (focusedIndex !== -1) {
+          setFocusedIndex(-1);
+          return;
+        }
+        return;
+      }
+
+      // If typing in an input, don't trigger global single-key shortcuts
+      if (isInputFocused) {
+        if (e.key === 'ArrowDown' && filteredResources.length > 0) {
+          (document.activeElement as HTMLElement)?.blur();
+          setFocusedIndex(0);
+          e.preventDefault();
+        }
+        return;
+      }
+
+      // If any modal is open, avoid background keyboard shortcuts
+      const hasAnyModalOpen =
+        isAddModalOpen ||
+        isBulkModalOpen ||
+        isBackupModalOpen ||
+        Boolean(deletingId) ||
+        isAuthModalOpen ||
+        isShortcutsModalOpen;
+
+      if (hasAnyModalOpen) return;
+
+      // '?' opens keyboard shortcuts modal
+      if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+        e.preventDefault();
+        setIsShortcutsModalOpen((prev) => !prev);
+        return;
+      }
+
+      // 'n' or 'a' opens Add Resource modal
+      if (e.key === 'n' || e.key === 'a') {
+        e.preventDefault();
+        if (!user) {
+          setAuthModalMode('signup');
+          setIsAuthModalOpen(true);
+        } else {
+          setEditingResource(null);
+          setIsAddModalOpen(true);
+        }
+        return;
+      }
+
+      // 's' toggles select mode
+      if (e.key === 's') {
+        e.preventDefault();
+        setIsSelectMode((prev) => {
+          if (prev) setSelectedIds(new Set());
+          return !prev;
+        });
+        return;
+      }
+
+      // 'g' toggles grid / list view
+      if (e.key === 'g') {
+        e.preventDefault();
+        setViewMode((prev) => (prev === 'grid' ? 'list' : 'grid'));
+        return;
+      }
+
+      // Arrow navigation across filtered search results
+      if (filteredResources.length > 0) {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+          e.preventDefault();
+          setFocusedIndex((prev) => {
+            const next = prev < 0 ? 0 : Math.min(prev + 1, filteredResources.length - 1);
+            const target = filteredResources[next];
+            if (target) {
+              const el = document.getElementById(`resource-card-${target.id}`);
+              el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+            return next;
+          });
+          return;
+        }
+
+        if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+          e.preventDefault();
+          setFocusedIndex((prev) => {
+            const next = prev <= 0 ? 0 : prev - 1;
+            const target = filteredResources[next];
+            if (target) {
+              const el = document.getElementById(`resource-card-${target.id}`);
+              el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+            return next;
+          });
+          return;
+        }
+
+        // Enter opens focused resource in new tab and tracks click
+        if (e.key === 'Enter' && focusedIndex >= 0 && focusedIndex < filteredResources.length) {
+          e.preventDefault();
+          const target = filteredResources[focusedIndex];
+          if (target) {
+            window.open(target.url, '_blank', 'noopener,noreferrer');
+            handleResourceClick(target.id);
+          }
+          return;
+        }
+
+        // 'x' toggles selection of currently focused card
+        if (e.key === 'x' && focusedIndex >= 0 && focusedIndex < filteredResources.length) {
+          e.preventDefault();
+          const target = filteredResources[focusedIndex];
+          if (target) {
+            if (!isSelectMode) setIsSelectMode(true);
+            handleToggleSelect(target.id);
+          }
+          return;
+        }
+
+        // 'c' copies link of focused resource
+        if (e.key === 'c' && focusedIndex >= 0 && focusedIndex < filteredResources.length) {
+          e.preventDefault();
+          const target = filteredResources[focusedIndex];
+          if (target) {
+            navigator.clipboard.writeText(target.url);
+            showToast('Link copied to clipboard', 'copy');
+          }
+          return;
+        }
+
+        // 'p' pins/unpins focused resource
+        if (e.key === 'p' && focusedIndex >= 0 && focusedIndex < filteredResources.length) {
+          e.preventDefault();
+          const target = filteredResources[focusedIndex];
+          if (target) {
+            handleTogglePin(target.id, !target.isPinned);
+          }
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    isShortcutsModalOpen,
+    isAddModalOpen,
+    isBulkModalOpen,
+    isBackupModalOpen,
+    deletingId,
+    isAuthModalOpen,
+    isSelectMode,
+    focusedIndex,
+    filteredResources,
+    user,
+    handleResourceClick,
+    handleTogglePin,
+    handleToggleSelect,
+    showToast,
+  ]);
 
   // Bulk save batch from AI parser to Supabase
   const handleSaveBulkBatch = async (
@@ -510,6 +905,16 @@ export default function Home() {
         }}
         onOpenBackupModal={() => {
           setIsBackupModalOpen(true);
+        }}
+        onOpenShortcutsModal={() => {
+          setIsShortcutsModalOpen(true);
+        }}
+        isSelectMode={isSelectMode}
+        onToggleSelectMode={() => {
+          setIsSelectMode((prev) => {
+            if (prev) setSelectedIds(new Set());
+            return !prev;
+          });
         }}
         totalResources={resources.length}
         user={user}
@@ -664,6 +1069,16 @@ export default function Home() {
           />
         )}
 
+        {/* Recently Added / Recently Opened Quick-Access Shelf */}
+        {user && resources.length > 0 && !searchQuery && !activeCategory && selectedTags.length === 0 && (
+          <RecentShelf
+            resources={resources}
+            onResourceClick={handleResourceClick}
+            onCopySuccess={() => showToast('Link copied to clipboard', 'copy')}
+            onCategoryClick={(cat: string) => setActiveCategory(cat)}
+          />
+        )}
+
         {/* Search / Filter Active Indicator */}
         {user && (searchQuery || activeCategory || selectedTags.length > 0) && (
           <div className="mb-4 flex items-center justify-between bg-indigo-500/10 border border-indigo-500/20 px-4 py-2.5 rounded-xl text-xs flex-wrap gap-2">
@@ -716,7 +1131,7 @@ export default function Home() {
         ) : user && filteredResources.length > 0 ? (
           viewMode === 'grid' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredResources.map((resource) => (
+              {filteredResources.map((resource, index) => (
                 <ResourceCard
                   key={resource.id}
                   resource={resource}
@@ -730,12 +1145,16 @@ export default function Home() {
                   onCopySuccess={() => showToast('Link copied to clipboard', 'copy')}
                   onTagClick={(tag) => handleToggleTag(tag)}
                   onCategoryClick={(cat) => setActiveCategory(cat)}
+                  isSelectMode={isSelectMode}
+                  isSelected={selectedIds.has(resource.id)}
+                  onToggleSelect={handleToggleSelect}
+                  isFocused={focusedIndex === index}
                 />
               ))}
             </div>
           ) : (
             <div className="space-y-2.5">
-              {filteredResources.map((resource) => (
+              {filteredResources.map((resource, index) => (
                 <ResourceListRow
                   key={resource.id}
                   resource={resource}
@@ -749,6 +1168,10 @@ export default function Home() {
                   onCopySuccess={() => showToast('Link copied to clipboard', 'copy')}
                   onTagClick={(tag) => handleToggleTag(tag)}
                   onCategoryClick={(cat) => setActiveCategory(cat)}
+                  isSelectMode={isSelectMode}
+                  isSelected={selectedIds.has(resource.id)}
+                  onToggleSelect={handleToggleSelect}
+                  isFocused={focusedIndex === index}
                 />
               ))}
             </div>
@@ -843,6 +1266,7 @@ export default function Home() {
           setEditingResource(null);
         }}
         onSave={handleSaveResource}
+        existingResources={resources}
         existingCategories={existingCategories}
         existingTags={existingTags}
         editingResource={editingResource}
@@ -871,6 +1295,32 @@ export default function Home() {
         onClose={() => setIsBackupModalOpen(false)}
         resources={resources}
         onImport={handleBulkImportFile}
+      />
+
+      {/* Floating Bulk Actions Toolbar */}
+      {isSelectMode && (
+        <BulkActionsBar
+          selectedCount={selectedIds.size}
+          totalFilteredCount={filteredResources.length}
+          onSelectAll={handleSelectAll}
+          onDeselectAll={handleDeselectAll}
+          onBulkDelete={handleBulkDelete}
+          onBulkRecategorize={handleBulkRecategorize}
+          onBulkAddTag={handleBulkAddTag}
+          onBulkRemoveTag={handleBulkRemoveTag}
+          onCloseSelectMode={() => {
+            setIsSelectMode(false);
+            setSelectedIds(new Set());
+          }}
+          existingCategories={existingCategories}
+          existingTags={existingTags}
+        />
+      )}
+
+      {/* Keyboard Shortcuts Cheat Sheet Modal */}
+      <ShortcutsModal
+        isOpen={isShortcutsModalOpen}
+        onClose={() => setIsShortcutsModalOpen(false)}
       />
 
       {/* Action Feedback Toast Notifications */}

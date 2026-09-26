@@ -274,6 +274,71 @@ export async function deleteResource(id: string): Promise<boolean> {
   return true;
 }
 
+// Bulk delete resources from Supabase
+export async function bulkDeleteResources(ids: string[]): Promise<boolean> {
+  if (ids.length === 0) return true;
+  const supabase = createClient();
+  const { error } = await supabase.from('resources').delete().in('id', ids);
+
+  if (error) {
+    console.error('Supabase bulkDeleteResources error:', error);
+    return false;
+  }
+  return true;
+}
+
+// Bulk update category for selected resources
+export async function bulkUpdateCategory(ids: string[], categoryName: string): Promise<boolean> {
+  if (ids.length === 0) return true;
+  const clean = categoryName.trim();
+  if (!clean) return false;
+
+  await ensureCategoryExists(clean);
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from('resources')
+    .update({ category: clean, updated_at: new Date().toISOString() })
+    .in('id', ids);
+
+  if (error) {
+    console.error('Supabase bulkUpdateCategory error:', error);
+    return false;
+  }
+  return true;
+}
+
+// Bulk add or remove tag for selected resources
+export async function bulkModifyTag(
+  resources: Resource[],
+  ids: string[],
+  tag: string,
+  action: 'add' | 'remove'
+): Promise<boolean> {
+  if (ids.length === 0) return true;
+  const clean = tag.trim().toLowerCase();
+  if (!clean) return false;
+
+  const supabase = createClient();
+  const idSet = new Set(ids);
+  const targets = resources.filter((r) => idSet.has(r.id));
+
+  const updates = targets.map((r) => {
+    const current = r.tags || [];
+    const nextTags =
+      action === 'add'
+        ? Array.from(new Set([...current, clean]))
+        : current.filter((t) => t.toLowerCase() !== clean);
+    return supabase
+      .from('resources')
+      .update({ tags: nextTags, updated_at: new Date().toISOString() })
+      .eq('id', r.id);
+  });
+
+  await Promise.all(updates);
+  return true;
+}
+
 // Fetch user categories from Supabase with counts
 export async function fetchCategories(): Promise<CategoryStat[]> {
   const supabase = createClient();
