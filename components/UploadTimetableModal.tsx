@@ -81,10 +81,16 @@ export const UploadTimetableModal: React.FC<UploadTimetableModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Process chosen file into Base64 & Preview
-  const handleFileChosen = (file: File) => {
+  // Compress & downscale large image to prevent Vercel 4.5MB payload limits and ensure snappy uploads
+  const processImageFile = async (file: File) => {
     if (!file.type.startsWith('image/')) {
       setErrorMessage('Please select a valid image file (JPG, PNG, WebP, HEIC).');
+      return;
+    }
+
+    // Check raw file size limit (15MB max)
+    if (file.size > 15 * 1024 * 1024) {
+      setErrorMessage('Image is too large (over 15MB). Please choose a smaller photo.');
       return;
     }
 
@@ -92,21 +98,59 @@ export const UploadTimetableModal: React.FC<UploadTimetableModalProps> = ({
     setIsUnreadable(false);
     setSelectedFile(file);
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
-      setPreviewUrl(dataUrl);
+    try {
+      const { dataUrl, base64 } = await new Promise<{ dataUrl: string; base64: string }>(
+        (resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const rawUrl = e.target?.result as string;
+            const img = new Image();
+            img.onload = () => {
+              const maxDim = 1600;
+              let width = img.width;
+              let height = img.height;
 
-      // Clean base64 string
-      const parts = dataUrl.split(',');
-      if (parts.length > 1) {
-        setBase64Data(parts[1]);
-      }
-    };
-    reader.onerror = () => {
-      setErrorMessage('Failed to read the selected image file. Please try again.');
-    };
-    reader.readAsDataURL(file);
+              if (width > maxDim || height > maxDim) {
+                if (width > height) {
+                  height = Math.round((height * maxDim) / width);
+                  width = maxDim;
+                } else {
+                  width = Math.round((width * maxDim) / height);
+                  height = maxDim;
+                }
+              }
+
+              const canvas = document.createElement('canvas');
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext('2d');
+              if (!ctx) {
+                const parts = rawUrl.split(',');
+                resolve({ dataUrl: rawUrl, base64: parts[1] || '' });
+                return;
+              }
+
+              ctx.drawImage(img, 0, 0, width, height);
+              const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+              const compressedBase64 = compressedDataUrl.split(',')[1] || '';
+              resolve({ dataUrl: compressedDataUrl, base64: compressedBase64 });
+            };
+            img.onerror = () => {
+              const parts = rawUrl.split(',');
+              resolve({ dataUrl: rawUrl, base64: parts[1] || '' });
+            };
+            img.src = rawUrl;
+          };
+          reader.onerror = () => reject(new Error('Failed to read selected image'));
+          reader.readAsDataURL(file);
+        }
+      );
+
+      setPreviewUrl(dataUrl);
+      setBase64Data(base64);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to process selected image file.');
+    }
   };
 
   // Drag and drop handlers
@@ -124,33 +168,35 @@ export const UploadTimetableModal: React.FC<UploadTimetableModalProps> = ({
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFileChosen(e.dataTransfer.files[0]);
+      processImageFile(e.dataTransfer.files[0]);
     }
   };
 
-  // Run conflict detection on extracted classes against existingClasses
+  // Run conflict detection on extracted classes against existingClasses with null safety
   const detectConflicts = (
     items: ExtractedClassCandidate[],
     existing: FixedEvent[]
   ): ExtractedClassCandidate[] => {
-    return items.map((item) => {
+    return (items || []).map((item) => {
       // Find any existing class on same day with time overlap
-      const conflicting = existing.find((ex) => {
-        if (ex.dayOfWeek !== item.dayOfWeek) return false;
-        const candStart = item.startTime;
-        const candEnd = item.endTime;
-        const exStart = ex.startTime.slice(0, 5);
-        const exEnd = ex.endTime.slice(0, 5);
-        return candStart < exEnd && candEnd > exStart;
+      const conflicting = (existing || []).find((ex) => {
+        if (!ex || ex.dayOfWeek !== item.dayOfWeek) return false;
+        const candStart = (item.startTime || '').slice(0, 5);
+        const candEnd = (item.endTime || '').slice(0, 5);
+        const exStart = (ex.startTime || '').slice(0, 5);
+        const exEnd = (ex.endTime || '').slice(0, 5);
+        return candStart && candEnd && exStart && exEnd && candStart < exEnd && candEnd > exStart;
       });
 
       if (conflicting) {
+        const exStart = (conflicting.startTime || '').slice(0, 5);
+        const exEnd = (conflicting.endTime || '').slice(0, 5);
         return {
           ...item,
           conflict: {
             existingId: conflicting.id,
-            existingTitle: conflicting.title,
-            existingTime: `${conflicting.startTime.slice(0, 5)} - ${conflicting.endTime.slice(0, 5)}`,
+            existingTitle: conflicting.title || 'Existing Class',
+            existingTime: `${exStart} - ${exEnd}`,
           },
           // Default resolution: keep existing (safe default to never overwrite without user choice)
           conflictResolution: item.conflictResolution || 'keep_existing',
@@ -184,16 +230,25 @@ export const UploadTimetableModal: React.FC<UploadTimetableModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           imageBase64: base64Data,
-          mimeType: selectedFile.type || 'image/jpeg',
+          mimeType: 'image/jpeg',
         }),
       });
 
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        if (res.status === 413) {
+          throw new Error('The timetable image is too large for the server. Please crop or downsize the photo.');
+        }
+        throw new Error(`Server returned HTTP ${res.status}. Please check your connection and try again.`);
+      }
 
       if (!res.ok || data.unreadable) {
         setIsUnreadable(true);
         throw new Error(
-          data.error ||
+          data.unreadableReason ||
+            data.error ||
             "We couldn't detect a readable weekly timetable in this image. Please ensure the timetable is clearly visible and in focus, then try retaking the photo."
         );
       }
@@ -201,14 +256,15 @@ export const UploadTimetableModal: React.FC<UploadTimetableModalProps> = ({
       if (!data.classes || data.classes.length === 0) {
         setIsUnreadable(true);
         throw new Error(
-          'No classes or commitments could be recognized in this image. Please check your photo and try again.'
+          data.unreadableReason ||
+            'No classes or commitments could be recognized in this image. Please check your photo and try again.'
         );
       }
 
       setExtractedTitle(data.scheduleTitle || null);
 
       // Perform initial conflict detection
-      const analyzedCandidates = detectConflicts(data.classes, existingClasses);
+      const analyzedCandidates = detectConflicts(data.classes, existingClasses || []);
       setCandidates(analyzedCandidates);
       setStep('review');
     } catch (err: any) {
@@ -427,7 +483,7 @@ export const UploadTimetableModal: React.FC<UploadTimetableModalProps> = ({
                 className="hidden"
                 onChange={(e) => {
                   if (e.target.files && e.target.files.length > 0) {
-                    handleFileChosen(e.target.files[0]);
+                    processImageFile(e.target.files[0]);
                   }
                 }}
               />
@@ -439,7 +495,7 @@ export const UploadTimetableModal: React.FC<UploadTimetableModalProps> = ({
                 className="hidden"
                 onChange={(e) => {
                   if (e.target.files && e.target.files.length > 0) {
-                    handleFileChosen(e.target.files[0]);
+                    processImageFile(e.target.files[0]);
                   }
                 }}
               />
