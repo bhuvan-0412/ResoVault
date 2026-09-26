@@ -22,6 +22,20 @@ export async function POST(req: Request) {
     }
 
     const targetDate = date || new Date().toISOString().split('T')[0];
+    const normalizedSlot = timeSlot ? timeSlot.slice(0, 5) : null;
+
+    // Check if an energy level was tagged for this slot
+    let taggedEnergy = body.energyLevel;
+    if (!taggedEnergy && normalizedSlot) {
+      const { data: energyRow } = await supabase
+        .from('energy_logs')
+        .select('energy_level')
+        .eq('user_id', user.id)
+        .eq('date', targetDate)
+        .eq('time_block', normalizedSlot)
+        .maybeSingle();
+      if (energyRow) taggedEnergy = energyRow.energy_level;
+    }
 
     // Upsert completion record
     const { data, error } = await supabase
@@ -33,7 +47,7 @@ export async function POST(req: Request) {
           block_id: blockId,
           date: targetDate,
           status,
-          time_slot: timeSlot || null,
+          time_slot: normalizedSlot || null,
           action_at: new Date().toISOString(),
         },
         { onConflict: 'schedule_id,block_id' }
@@ -41,9 +55,36 @@ export async function POST(req: Request) {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error && error.code !== '42P01') throw error;
 
-    return NextResponse.json({ success: true, completion: data });
+    // If 14+ days of data exists for this time slot, update derived_score on energy_logs
+    if (normalizedSlot) {
+      try {
+        const { data: slotRecords } = await supabase
+          .from('schedule_completions')
+          .select('date, status')
+          .eq('user_id', user.id)
+          .eq('time_slot', normalizedSlot);
+
+        if (slotRecords && slotRecords.length > 0) {
+          const distinctDays = new Set(slotRecords.map((r: any) => r.date)).size;
+          if (distinctDays >= 14) {
+            const completed = slotRecords.filter((r: any) => r.status === 'completed').length;
+            const derivedScore = Number((completed / slotRecords.length).toFixed(2));
+
+            await supabase
+              .from('energy_logs')
+              .update({ derived_score: derivedScore })
+              .eq('user_id', user.id)
+              .eq('time_block', normalizedSlot);
+          }
+        }
+      } catch (calcErr) {
+        console.warn('Error updating energy derived score on completion:', calcErr);
+      }
+    }
+
+    return NextResponse.json({ success: true, completion: data, energyLevel: taggedEnergy });
   } catch (error: any) {
     console.error('Error recording schedule completion:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -106,8 +147,8 @@ export async function GET(req: Request) {
     const dailyCompletionRate = totalBlocksCount > 0
       ? Math.round((completedBlocksCount / totalBlocksCount) * 100)
       : todayRec && todayRec.total > 0
-      ? Math.round((todayRec.completed / todayRec.total) * 100)
-      : 0;
+        ? Math.round((todayRec.completed / todayRec.total) * 100)
+        : 0;
 
     // Weekly completion rate (past 7 days)
     let weeklyTotalCompleted = 0;

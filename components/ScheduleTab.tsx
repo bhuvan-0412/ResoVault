@@ -34,10 +34,13 @@ import {
   ScheduleConflict,
   ScheduleStats,
   SchedulePreferences,
+  EnergyLevel,
+  EnergyLog,
 } from '@/lib/types';
 import { AddEditFixedEventModal } from './AddEditFixedEventModal';
 import { AddEditTodoModal } from './AddEditTodoModal';
 import { NaturalLanguageScheduleModal } from './NaturalLanguageScheduleModal';
+import { EnergyPatternView } from './EnergyPatternView';
 
 interface ScheduleTabProps {
   isAuthenticated: boolean;
@@ -55,13 +58,16 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
     return new Date().toISOString().split('T')[0];
   });
 
-  // Active sub-view: 'timetable' | 'todos' | 'fixed' | 'preferences'
-  const [activeSubView, setActiveSubView] = useState<'timetable' | 'todos' | 'fixed' | 'preferences'>('timetable');
+  // Active sub-view: 'timetable' | 'todos' | 'fixed' | 'energy' | 'preferences'
+  const [activeSubView, setActiveSubView] = useState<'timetable' | 'todos' | 'fixed' | 'energy' | 'preferences'>('timetable');
 
   // Core data states
   const [schedule, setSchedule] = useState<GeneratedSchedule | null>(null);
   const [fixedEvents, setFixedEvents] = useState<FixedEvent[]>([]);
   const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [energyLogs, setEnergyLogs] = useState<EnergyLog[]>([]);
+  const [slotPatterns, setSlotPatterns] = useState<Record<string, any>>({});
+  const [activeEnergyPopoverBlockId, setActiveEnergyPopoverBlockId] = useState<string | null>(null);
   const [stats, setStats] = useState<ScheduleStats>({
     streakDays: 0,
     dailyCompletionRate: 0,
@@ -86,15 +92,16 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
   // Filter for todos
   const [todoFilter, setTodoFilter] = useState<'all' | 'open' | 'completed'>('open');
 
-  // 1. Fetch user data (fixed classes, deadlines, preferences, conflicts)
+  // 1. Fetch user data (fixed classes, deadlines, preferences, conflicts, energy logs)
   const loadBaseData = useCallback(async () => {
     if (!isAuthenticated) return;
     try {
-      const [fixedRes, todosRes, conflictsRes, statsRes] = await Promise.all([
+      const [fixedRes, todosRes, conflictsRes, statsRes, energyRes] = await Promise.all([
         fetch('/api/schedule/fixed-classes'),
         fetch('/api/schedule/deadlines'),
         fetch('/api/schedule/conflicts'),
         fetch(`/api/schedule/completions?date=${selectedDate}`),
+        fetch(`/api/schedule/energy?date=${selectedDate}`),
       ]);
 
       if (fixedRes.ok) {
@@ -113,10 +120,55 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
         const data = await statsRes.json();
         if (data.stats) setStats(data.stats);
       }
+      if (energyRes.ok) {
+        const energyData = await energyRes.json();
+        setEnergyLogs(energyData.logs || []);
+        setSlotPatterns(energyData.slotPatterns || {});
+      }
     } catch (err) {
       console.warn('Error loading schedule base data:', err);
     }
   }, [isAuthenticated, selectedDate]);
+
+  // Tag Energy for a Time Slot (Quick Tap-to-Tag)
+  const handleTagEnergySlot = async (timeSlot: string, level: EnergyLevel) => {
+    if (!isAuthenticated) {
+      onRequireAuth();
+      return;
+    }
+
+    const hourSlot = timeSlot.includes(':') ? timeSlot.slice(0, 2) + ':00' : '09:00';
+    // Optimistic UI update
+    setSlotPatterns((prev) => ({
+      ...prev,
+      [hourSlot]: {
+        ...(prev[hourSlot] || { timeSlot: hourSlot }),
+        manualLevel: level,
+        effectiveLevel: level,
+      },
+    }));
+
+    try {
+      const res = await fetch('/api/schedule/energy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: selectedDate,
+          timeBlock: hourSlot,
+          energyLevel: level,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.log) {
+          setEnergyLogs((prev) => [...prev.filter((l) => l.timeBlock !== hourSlot), data.log]);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to tag energy slot:', err);
+    }
+  };
 
   // 2. Fetch or generate timetable for selected date
   const loadTimetable = useCallback(async (force = false) => {
@@ -131,10 +183,10 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
       const endpoint = force ? '/api/schedule/generate' : `/api/schedule/generate?date=${selectedDate}`;
       const options = force
         ? {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ date: selectedDate, forceRegenerate: true }),
-          }
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date: selectedDate, forceRegenerate: true }),
+        }
         : { method: 'GET' };
 
       const res = await fetch(endpoint, options);
@@ -182,14 +234,17 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
         blocks: prev.blocks.map((b) =>
           b.id === block.id
             ? {
-                ...b,
-                isCompleted: status === 'completed',
-                isSkipped: status === 'skipped',
-              }
+              ...b,
+              isCompleted: status === 'completed',
+              isSkipped: status === 'skipped',
+            }
             : b
         ),
       };
     });
+
+    const slotHour = block.startTime.slice(0, 2) + ':00';
+    const taggedEnergy = slotPatterns[slotHour]?.manualLevel || slotPatterns[slotHour]?.effectiveLevel || block.energyLevelRequired || null;
 
     try {
       await fetch('/api/schedule/completions', {
@@ -201,26 +256,34 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
           date: selectedDate,
           status,
           timeSlot: `${block.startTime}-${block.endTime}`,
+          energyLevel: taggedEnergy,
         }),
       });
 
       // If linked to a todo item and marked done, mark the todo completed too
       if (status === 'completed' && block.todoId) {
-        await fetch('/api/schedule/todos', {
+        await fetch('/api/schedule/deadlines', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: block.todoId, completed: true }),
+          body: JSON.stringify({ id: block.todoId, completed: true, status: 'done' }),
         });
         setTodos((prev) =>
-          prev.map((t) => (t.id === block.todoId ? { ...t, completed: true } : t))
+          prev.map((t) => (t.id === block.todoId ? { ...t, completed: true, status: 'done' } : t))
         );
       }
 
-      // Refresh stats
-      const statsRes = await fetch(`/api/schedule/completions?date=${selectedDate}`);
+      // Refresh stats & energy patterns
+      const [statsRes, energyRes] = await Promise.all([
+        fetch(`/api/schedule/completions?date=${selectedDate}`),
+        fetch(`/api/schedule/energy?date=${selectedDate}`),
+      ]);
       if (statsRes.ok) {
         const sData = await statsRes.json();
         if (sData.stats) setStats(sData.stats);
+      }
+      if (energyRes.ok) {
+        const eData = await energyRes.json();
+        setSlotPatterns(eData.slotPatterns || {});
       }
     } catch (err) {
       console.error('Failed to log completion:', err);
@@ -329,17 +392,15 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
               </h2>
               {/* Gamified Streak Counter */}
               <div
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-all ${
-                  stats.streakDays > 0
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-all ${stats.streakDays > 0
                     ? 'bg-amber-500/10 border-amber-500/30 text-amber-300 shadow-sm shadow-amber-500/10'
                     : 'bg-zinc-800/80 border-zinc-700/60 text-zinc-400'
-                }`}
+                  }`}
                 title="Consecutive days maintaining 70%+ completed schedule blocks"
               >
                 <Flame
-                  className={`w-4 h-4 ${
-                    stats.streakDays > 0 ? 'text-amber-400 fill-amber-400 animate-pulse' : 'text-zinc-500'
-                  }`}
+                  className={`w-4 h-4 ${stats.streakDays > 0 ? 'text-amber-400 fill-amber-400 animate-pulse' : 'text-zinc-500'
+                    }`}
                 />
                 <span>
                   {stats.streakDays > 0 ? `${stats.streakDays}-Day Streak!` : 'Start Streak Today'}
@@ -491,36 +552,43 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
         <div className="flex items-center gap-2 overflow-x-auto py-1">
           <button
             onClick={() => setActiveSubView('timetable')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-              activeSubView === 'timetable'
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeSubView === 'timetable'
                 ? 'bg-zinc-800 text-white shadow-sm'
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
-            }`}
+              }`}
           >
             <Clock className="w-3.5 h-3.5 text-indigo-400" />
             <span>Daily Timetable</span>
           </button>
           <button
             onClick={() => setActiveSubView('todos')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-              activeSubView === 'todos'
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeSubView === 'todos'
                 ? 'bg-zinc-800 text-white shadow-sm'
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
-            }`}
+              }`}
           >
             <CheckSquare className="w-3.5 h-3.5 text-indigo-400" />
             <span>Tasks Backlog ({todos.filter((t) => !t.completed).length})</span>
           </button>
           <button
             onClick={() => setActiveSubView('fixed')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-              activeSubView === 'fixed'
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeSubView === 'fixed'
                 ? 'bg-zinc-800 text-white shadow-sm'
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
-            }`}
+              }`}
           >
             <Repeat className="w-3.5 h-3.5 text-violet-400" />
             <span>Recurring Commitments ({fixedEvents.length})</span>
+          </button>
+          <button
+            onClick={() => setActiveSubView('energy')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeSubView === 'energy'
+                ? 'bg-zinc-800 text-white shadow-sm'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
+              }`}
+          >
+            <Zap className="w-3.5 h-3.5 text-amber-400" />
+            <span>Energy Rhythm</span>
           </button>
         </div>
 
@@ -566,6 +634,13 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
       {/* 4. Sub-View: Daily Timetable */}
       {activeSubView === 'timetable' && (
         <div className="space-y-4">
+          {/* Energy Rhythm Strip & Tap-to-Tag View */}
+          <EnergyPatternView
+            date={selectedDate}
+            slotPatterns={slotPatterns}
+            onTagSlot={handleTagEnergySlot}
+          />
+
           {/* AI Strategy Summary Card */}
           {schedule?.summary && (
             <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-950/40 via-zinc-900 to-violet-950/40 border border-indigo-500/20 text-xs flex items-start gap-3">
@@ -616,6 +691,11 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
                   cardBorder = 'border-indigo-500 ring-2 ring-indigo-500/20';
                   cardBg = 'bg-zinc-900';
                 }
+
+                const slotHour = block.startTime.slice(0, 2) + ':00';
+                const slotData = slotPatterns[slotHour];
+                const currentEnergy = slotData?.manualLevel || slotData?.effectiveLevel || block.energyLevelRequired || null;
+                const isEnergyPopoverOpen = activeEnergyPopoverBlockId === block.id;
 
                 return (
                   <div
@@ -691,8 +771,71 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
                         )}
                       </div>
 
-                      {/* Right: Interactive Completion Buttons */}
+                      {/* Right: Interactive Completion & Fast Energy Tag Buttons */}
                       <div className="flex items-center gap-2 shrink-0">
+                        {/* Quick 1-Tap Energy Tag Popover */}
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setActiveEnergyPopoverBlockId(isEnergyPopoverOpen ? null : block.id)}
+                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                              currentEnergy === 'high'
+                                ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20'
+                                : currentEnergy === 'medium'
+                                ? 'bg-amber-500/10 text-amber-300 border-amber-500/30 hover:bg-amber-500/20'
+                                : currentEnergy === 'low'
+                                ? 'bg-blue-500/10 text-blue-300 border-blue-500/30 hover:bg-blue-500/20'
+                                : 'bg-zinc-800/90 text-zinc-400 border-zinc-700/60 hover:text-zinc-200'
+                            }`}
+                            title={`Tap to tag energy level for ${slotHour}`}
+                          >
+                            <Zap className={`w-3 h-3 ${
+                              currentEnergy === 'high' ? 'text-emerald-400 fill-emerald-400' :
+                              currentEnergy === 'medium' ? 'text-amber-400 fill-amber-400' :
+                              currentEnergy === 'low' ? 'text-blue-400' : 'text-zinc-500'
+                            }`} />
+                            <span className="capitalize">
+                              {currentEnergy ? `${currentEnergy}` : 'Energy'}
+                            </span>
+                          </button>
+
+                          {isEnergyPopoverOpen && (
+                            <div className="absolute right-0 top-full mt-1.5 z-50 bg-zinc-900 border border-zinc-700/80 p-1.5 rounded-xl shadow-2xl flex items-center gap-1 animate-in fade-in zoom-in-95 duration-100">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleTagEnergySlot(slotHour, 'high');
+                                  setActiveEnergyPopoverBlockId(null);
+                                }}
+                                className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all cursor-pointer flex items-center gap-1"
+                              >
+                                <Zap className="w-3 h-3 text-emerald-400 fill-emerald-400" />
+                                <span>High</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleTagEnergySlot(slotHour, 'medium');
+                                  setActiveEnergyPopoverBlockId(null);
+                                }}
+                                className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 transition-all cursor-pointer"
+                              >
+                                <span>Med</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleTagEnergySlot(slotHour, 'low');
+                                  setActiveEnergyPopoverBlockId(null);
+                                }}
+                                className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/40 transition-all cursor-pointer"
+                              >
+                                <span>Low</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
                         {block.isCompleted ? (
                           <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl">
                             <CheckCircle2 className="w-3.5 h-3.5" />
@@ -757,31 +900,28 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setTodoFilter('open')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  todoFilter === 'open'
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${todoFilter === 'open'
                     ? 'bg-zinc-800 text-white'
                     : 'text-zinc-400 hover:text-zinc-200'
-                }`}
+                  }`}
               >
                 Open Tasks ({todos.filter((t) => !t.completed).length})
               </button>
               <button
                 onClick={() => setTodoFilter('completed')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  todoFilter === 'completed'
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${todoFilter === 'completed'
                     ? 'bg-zinc-800 text-white'
                     : 'text-zinc-400 hover:text-zinc-200'
-                }`}
+                  }`}
               >
                 Completed ({todos.filter((t) => t.completed).length})
               </button>
               <button
                 onClick={() => setTodoFilter('all')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  todoFilter === 'all'
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${todoFilter === 'all'
                     ? 'bg-zinc-800 text-white'
                     : 'text-zinc-400 hover:text-zinc-200'
-                }`}
+                  }`}
               >
                 All
               </button>
@@ -811,13 +951,12 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
                 return (
                   <div
                     key={todo.id}
-                    className={`p-3.5 rounded-xl bg-zinc-900/80 border transition-all flex items-center justify-between gap-3 ${
-                      isDone
+                    className={`p-3.5 rounded-xl bg-zinc-900/80 border transition-all flex items-center justify-between gap-3 ${isDone
                         ? 'border-zinc-800/50 opacity-60'
                         : isDueSoon
-                        ? 'border-amber-500/30'
-                        : 'border-zinc-800'
-                    }`}
+                          ? 'border-amber-500/30'
+                          : 'border-zinc-800'
+                      }`}
                   >
                     <div className="flex items-start gap-3 min-w-0 flex-1">
                       <input
@@ -829,9 +968,8 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <p
-                            className={`text-xs font-semibold truncate ${
-                              isDone ? 'line-through text-zinc-500' : 'text-zinc-100'
-                            }`}
+                            className={`text-xs font-semibold truncate ${isDone ? 'line-through text-zinc-500' : 'text-zinc-100'
+                              }`}
                           >
                             {todo.title}
                           </p>
@@ -839,13 +977,12 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
                           <button
                             type="button"
                             onClick={() => handleToggleTodoComplete(todo)}
-                            className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition-all cursor-pointer ${
-                              isDone
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition-all cursor-pointer ${isDone
                                 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                                 : isInProgress
-                                ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                                : 'bg-zinc-800 text-zinc-400 border border-zinc-700/50'
-                            }`}
+                                  ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                  : 'bg-zinc-800 text-zinc-400 border border-zinc-700/50'
+                              }`}
                           >
                             {isDone ? 'Done' : isInProgress ? 'In Progress' : 'Not Started'}
                           </button>
@@ -859,22 +996,20 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
 
                         <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-zinc-400">
                           <span
-                            className={`px-1.5 py-0.2 rounded text-[10px] font-semibold uppercase ${
-                              todo.priority === 'high'
+                            className={`px-1.5 py-0.2 rounded text-[10px] font-semibold uppercase ${todo.priority === 'high'
                                 ? 'bg-red-500/10 text-red-400'
                                 : todo.priority === 'medium'
-                                ? 'bg-amber-500/10 text-amber-400'
-                                : 'bg-emerald-500/10 text-emerald-400'
-                            }`}
+                                  ? 'bg-amber-500/10 text-amber-400'
+                                  : 'bg-emerald-500/10 text-emerald-400'
+                              }`}
                           >
                             {todo.priority}
                           </span>
                           <span>• {todo.estimatedDuration || 45} mins</span>
                           {todo.dueDate && (
                             <span
-                              className={`flex items-center gap-1 ${
-                                isDueSoon ? 'text-amber-400 font-semibold' : 'text-zinc-400'
-                              }`}
+                              className={`flex items-center gap-1 ${isDueSoon ? 'text-amber-400 font-semibold' : 'text-zinc-400'
+                                }`}
                             >
                               <Calendar className="w-3 h-3" />
                               {new Date(todo.dueDate).toLocaleDateString()}
@@ -1032,6 +1167,17 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* 7. Sub-View: Energy Rhythm & Analytics */}
+      {activeSubView === 'energy' && (
+        <div className="space-y-4">
+          <EnergyPatternView
+            date={selectedDate}
+            slotPatterns={slotPatterns}
+            onTagSlot={handleTagEnergySlot}
+          />
         </div>
       )}
 
