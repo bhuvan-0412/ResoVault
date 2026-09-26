@@ -26,6 +26,7 @@ import {
   ArrowRight,
   Zap,
   MapPin,
+  Camera,
 } from 'lucide-react';
 import {
   FixedEvent,
@@ -42,6 +43,7 @@ import {
 import { AddEditFixedEventModal } from './AddEditFixedEventModal';
 import { AddEditTodoModal } from './AddEditTodoModal';
 import { NaturalLanguageScheduleModal } from './NaturalLanguageScheduleModal';
+import { UploadTimetableModal } from './UploadTimetableModal';
 import { EnergyPatternView } from './EnergyPatternView';
 
 interface ScheduleTabProps {
@@ -94,6 +96,7 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
   const [isAddTodoOpen, setIsAddTodoOpen] = useState(false);
   const [editingTodo, setEditingTodo] = useState<TodoItem | null>(null);
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [isUploadImageModalOpen, setIsUploadImageModalOpen] = useState(false);
 
   // Filter for todos
   const [todoFilter, setTodoFilter] = useState<'all' | 'open' | 'completed'>('open');
@@ -516,6 +519,17 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
             >
               <Repeat className="w-3.5 h-3.5 text-violet-400" />
               <span>Add Commitment</span>
+            </button>
+            <button
+              onClick={() => {
+                if (!isAuthenticated) return onRequireAuth();
+                setIsUploadImageModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-violet-500/10 to-fuchsia-500/10 hover:from-violet-500/20 hover:to-fuchsia-500/20 text-violet-300 border border-violet-500/30 text-xs font-semibold transition-all active:scale-95 cursor-pointer"
+              title="Upload or take a photo of your timetable to extract classes with AI Vision"
+            >
+              <Camera className="w-3.5 h-3.5 text-violet-400" />
+              <span>Upload Timetable</span>
             </button>
             <button
               onClick={() => {
@@ -1295,17 +1309,44 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
               <h3 className="text-sm font-bold text-zinc-200">Weekly Recurring Commitments</h3>
               <p className="text-xs text-zinc-400">Classes, fitness, and fixed meetings that cannot be moved</p>
             </div>
-            <button
-              onClick={() => {
-                if (!isAuthenticated) return onRequireAuth();
-                setEditingFixed(null);
-                setIsAddFixedOpen(true);
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-sm transition-all cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Commitment</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isAuthenticated) return onRequireAuth();
+                  setIsUploadImageModalOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 text-xs font-semibold shadow-sm transition-all cursor-pointer"
+                title="Upload timetable photo or screenshot"
+              >
+                <Camera className="w-3.5 h-3.5 text-violet-400" />
+                <span>Upload Timetable</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isAuthenticated) return onRequireAuth();
+                  setIsAIModalOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700/60 text-xs font-semibold transition-all cursor-pointer"
+                title="Enter schedule in plain English"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Free Text</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isAuthenticated) return onRequireAuth();
+                  setEditingFixed(null);
+                  setIsAddFixedOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-sm transition-all cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Commitment</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1426,6 +1467,17 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
           loadBaseData();
           loadTimetable(true);
         }}
+      />
+
+      <UploadTimetableModal
+        isOpen={isUploadImageModalOpen}
+        onClose={() => setIsUploadImageModalOpen(false)}
+        onSuccess={async () => {
+          setIsUploadImageModalOpen(false);
+          await loadBaseData();
+          await loadTimetable(true);
+        }}
+        existingClasses={fixedEvents}
       />
     </div>
   );

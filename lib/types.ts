@@ -187,6 +187,26 @@ export interface ParsedCandidateItem {
   selected: boolean;
 }
 
+export type ConflictResolution = 'keep_existing' | 'add_anyway' | 'replace_existing';
+
+export interface ExtractedClassCandidate {
+  id: string;
+  title: string;
+  dayOfWeek: DayOfWeek;
+  startTime: string; // "HH:MM"
+  endTime: string;   // "HH:MM"
+  location?: string | null;
+  category?: string;
+  color?: string;
+  selected: boolean;
+  conflict?: {
+    existingId: string;
+    existingTitle: string;
+    existingTime: string;
+  } | null;
+  conflictResolution?: ConflictResolution;
+}
+
 export type ConflictType = 'overlapping_classes' | 'unachievable_deadline';
 
 export interface ScheduleConflict {
