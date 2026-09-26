@@ -23,16 +23,12 @@ async function computeSlotDerivedScore(
 ): Promise<{ derivedScore: number | null; daysRecorded: number; completedCount: number; totalCount: number }> {
   try {
     // Query completions with matching time slot
-    const { data: completions, error } = await supabase
+    const { data: completions } = await supabase
       .from('schedule_completions')
-      .select('date, status, time_slot')
+      .select('date, status, time_slot, feedback')
       .eq('user_id', userId);
 
-    if (error || !completions) {
-      return { derivedScore: null, daysRecorded: 0, completedCount: 0, totalCount: 0 };
-    }
-
-    const slotCompletions = completions.filter((c: any) => {
+    const slotCompletions: any[] = (completions || []).filter((c: any) => {
       if (!c.time_slot) return false;
       return normalizeTimeSlot(c.time_slot) === normalizedSlot;
     });
@@ -52,7 +48,20 @@ async function computeSlotDerivedScore(
 
     const completedCount = slotCompletions.filter((c: any) => c.status === 'completed').length;
     const totalCount = slotCompletions.length;
-    const score = totalCount > 0 ? Number((completedCount / totalCount).toFixed(2)) : null;
+
+    // Weight completed blocks based on feedback:
+    // 'great' = 1.0, 'good' / neutral = 0.85, 'tough' = 0.35, 'skipped' = 0.0
+    let weightedSum = 0;
+    for (const c of slotCompletions) {
+      if (c.status === 'completed') {
+        if (c.feedback === 'great') weightedSum += 1.0;
+        else if (c.feedback === 'good') weightedSum += 0.85;
+        else if (c.feedback === 'tough') weightedSum += 0.35;
+        else weightedSum += 0.85;
+      }
+    }
+
+    const score = totalCount > 0 ? Number((weightedSum / totalCount).toFixed(2)) : null;
 
     return {
       derivedScore: score,

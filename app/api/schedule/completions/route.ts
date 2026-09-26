@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { ScheduleStats } from '@/lib/types';
+import { ScheduleStats, BlockFeedback } from '@/lib/types';
+import { computeStreaks } from '../streaks/route';
 
 export async function POST(req: Request) {
   try {
@@ -12,7 +13,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { scheduleId, blockId, date, status, timeSlot } = body;
+    const { scheduleId, blockId, date, status, timeSlot, feedback } = body;
 
     if (!scheduleId || !blockId || !status) {
       return NextResponse.json(
@@ -23,68 +24,145 @@ export async function POST(req: Request) {
 
     const targetDate = date || new Date().toISOString().split('T')[0];
     const normalizedSlot = timeSlot ? timeSlot.slice(0, 5) : null;
+    const validatedFeedback: BlockFeedback | null = ['great', 'good', 'tough'].includes(feedback)
+      ? feedback
+      : null;
 
-    // Check if an energy level was tagged for this slot
-    let taggedEnergy = body.energyLevel;
-    if (!taggedEnergy && normalizedSlot) {
-      const { data: energyRow } = await supabase
-        .from('energy_logs')
-        .select('energy_level')
-        .eq('user_id', user.id)
-        .eq('date', targetDate)
-        .eq('time_block', normalizedSlot)
-        .maybeSingle();
-      if (energyRow) taggedEnergy = energyRow.energy_level;
+    // 1. Update schedule_blocks table if the block exists
+    try {
+      await supabase
+        .from('schedule_blocks')
+        .update({
+          status,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', blockId)
+        .eq('user_id', user.id);
+    } catch (blockErr) {
+      // Table pending migration
     }
 
-    // Upsert completion record
-    const { data, error } = await supabase
-      .from('schedule_completions')
-      .upsert(
-        {
-          user_id: user.id,
-          schedule_id: scheduleId,
-          block_id: blockId,
-          date: targetDate,
-          status,
-          time_slot: normalizedSlot || null,
-          action_at: new Date().toISOString(),
-        },
-        { onConflict: 'schedule_id,block_id' }
-      )
-      .select()
-      .single();
+    // 2. Resolve tagged energy level: check body first, then energy_logs for this date & slot
+    let taggedEnergy = body.energyLevel;
+    if (!taggedEnergy && normalizedSlot) {
+      try {
+        const { data: energyRow } = await supabase
+          .from('energy_logs')
+          .select('energy_level')
+          .eq('user_id', user.id)
+          .eq('date', targetDate)
+          .eq('time_block', normalizedSlot)
+          .maybeSingle();
+        if (energyRow) taggedEnergy = energyRow.energy_level;
+      } catch (eErr) {}
+    }
 
-    if (error && error.code !== '42P01') throw error;
+    // 3. Upsert completion record with feedback
+    let completionRecord = null;
+    try {
+      const completionPayload: any = {
+        user_id: user.id,
+        schedule_id: scheduleId,
+        block_id: blockId,
+        date: targetDate,
+        status,
+        time_slot: normalizedSlot || null,
+        action_at: new Date().toISOString(),
+      };
+      if (validatedFeedback) {
+        completionPayload.feedback = validatedFeedback;
+      }
 
-    // If 14+ days of data exists for this time slot, update derived_score on energy_logs
+      const { data: cData, error: cErr } = await supabase
+        .from('schedule_completions')
+        .upsert(completionPayload, { onConflict: 'schedule_id,block_id' })
+        .select()
+        .single();
+      if (!cErr) completionRecord = cData;
+    } catch (upsertErr) {}
+
+    // 4. Ensure outcome is recorded in energy_logs for this date/slot if tagged
+    if (normalizedSlot && taggedEnergy) {
+      try {
+        await supabase
+          .from('energy_logs')
+          .upsert(
+            {
+              user_id: user.id,
+              date: targetDate,
+              time_block: normalizedSlot,
+              energy_level: taggedEnergy,
+            },
+            { onConflict: 'user_id,date,time_block' }
+          );
+      } catch (energyUpsertErr) {}
+    }
+
+    // 5. Derive patterns over time (14-day threshold) with feedback-weighted scoring
     if (normalizedSlot) {
       try {
-        const { data: slotRecords } = await supabase
+        const { data: scData } = await supabase
           .from('schedule_completions')
-          .select('date, status')
+          .select('date, status, feedback')
           .eq('user_id', user.id)
           .eq('time_slot', normalizedSlot);
 
-        if (slotRecords && slotRecords.length > 0) {
-          const distinctDays = new Set(slotRecords.map((r: any) => r.date)).size;
-          if (distinctDays >= 14) {
-            const completed = slotRecords.filter((r: any) => r.status === 'completed').length;
-            const derivedScore = Number((completed / slotRecords.length).toFixed(2));
+        const { data: sbData } = await supabase
+          .from('schedule_blocks')
+          .select('date, status, start_time')
+          .eq('user_id', user.id)
+          .in('status', ['completed', 'skipped']);
 
-            await supabase
-              .from('energy_logs')
-              .update({ derived_score: derivedScore })
-              .eq('user_id', user.id)
-              .eq('time_block', normalizedSlot);
+        const combinedOutcomes: { date: string; status: string; feedback?: string }[] = [];
+        if (scData) combinedOutcomes.push(...scData);
+        if (sbData) {
+          sbData.forEach((b: any) => {
+            const bSlot = (b.start_time || '').slice(0, 5);
+            if (bSlot === normalizedSlot) {
+              combinedOutcomes.push({ date: b.date, status: b.status });
+            }
+          });
+        }
+
+        const distinctDays = new Set(combinedOutcomes.map((r) => r.date)).size;
+
+        if (distinctDays >= 14) {
+          // Weight completed blocks based on feedback:
+          // 'great' = 1.0, 'good' / neutral = 0.85, 'tough' = 0.35, 'skipped' = 0.0
+          let weightedSum = 0;
+          for (const item of combinedOutcomes) {
+            if (item.status === 'completed') {
+              if (item.feedback === 'great') weightedSum += 1.0;
+              else if (item.feedback === 'good') weightedSum += 0.85;
+              else if (item.feedback === 'tough') weightedSum += 0.35;
+              else weightedSum += 0.85;
+            }
           }
+
+          const derivedScore = Number((weightedSum / combinedOutcomes.length).toFixed(2));
+
+          await supabase
+            .from('energy_logs')
+            .update({ derived_score: derivedScore })
+            .eq('user_id', user.id)
+            .eq('time_block', normalizedSlot);
         }
       } catch (calcErr) {
         console.warn('Error updating energy derived score on completion:', calcErr);
       }
     }
 
-    return NextResponse.json({ success: true, completion: data, energyLevel: taggedEnergy });
+    // 6. Recalculate Streaks (Daily adherence >= 80% and category streaks)
+    const streakData = await computeStreaks(supabase, user.id);
+
+    return NextResponse.json({
+      success: true,
+      completion: completionRecord,
+      energyLevel: taggedEnergy,
+      feedback: validatedFeedback,
+      status,
+      streaks: streakData,
+    });
   } catch (error: any) {
     console.error('Error recording schedule completion:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -112,11 +190,12 @@ export async function GET(req: Request) {
       .maybeSingle();
 
     const blocks: any[] = scheduleData?.blocks || [];
-    // Only count todo and focus blocks for completion stats
-    const actionableBlocks = blocks.filter((b) => b.type === 'todo' || b.type === 'routine');
+    const actionableBlocks = blocks.filter(
+      (b) => b.type === 'study' || b.type === 'task' || b.type === 'todo' || b.type === 'routine'
+    );
     const totalBlocksCount = actionableBlocks.length;
 
-    // 2. Fetch completions for the last 14 days to compute streak & weekly %
+    // 2. Fetch completions for the last 14 days
     const fourteenDaysAgo = new Date();
     fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
     const sinceDateStr = fourteenDaysAgo.toISOString().split('T')[0];
@@ -170,50 +249,44 @@ export async function GET(req: Request) {
       ? Math.round((weeklyTotalCompleted / weeklyTotalActions) * 100)
       : 0;
 
-    // Calculate Streak Days (consecutive past days with >= 70% completion)
-    let streakDays = 0;
-    // Check if today meets criteria or check consecutive days starting from yesterday backwards
-    let checkDate = new Date();
-    // If today is completed >= 70%, start streak counting including today
-    if (dailyCompletionRate >= 70) {
-      streakDays++;
-    }
-    // Check backward from yesterday
-    for (let i = 1; i <= 30; i++) {
-      const d = new Date(todayDate);
-      d.setDate(d.getDate() - i);
-      const ds = d.toISOString().split('T')[0];
-      const rec = completionsByDate[ds];
+    // 3. Compute 80%+ Adherence & Category Streaks
+    const streakData = await computeStreaks(supabase, user.id);
 
-      if (rec && rec.total > 0 && (rec.completed / rec.total) >= 0.7) {
-        streakDays++;
-      } else if (i === 1 && (!rec || rec.total === 0)) {
-        // If yesterday was empty, streak might still be held if today is active
-        continue;
-      } else {
-        break;
+    // 4. Generate feedback loop summary notes for LLM generation context
+    let feedbackSummary = '';
+    const toughCompletions = allCompletions.filter((c) => c.feedback === 'tough');
+    const skippedSlots = allCompletions.filter((c) => c.status === 'skipped');
+
+    const feedbackNotes: string[] = [];
+    if (toughCompletions.length > 0) {
+      const toughSlots = Array.from(new Set(toughCompletions.map((c) => c.time_slot).filter(Boolean)));
+      if (toughSlots.length > 0) {
+        feedbackNotes.push(
+          `User reported high fatigue/drain during: ${toughSlots.join(', ')}. Avoid heavy cognitive blocks in these slots.`
+        );
       }
     }
-
-    // Generate feedback loop summary notes for LLM context
-    let feedbackSummary = '';
-    const skippedSlots = allCompletions.filter((c) => c.status === 'skipped');
     if (skippedSlots.length > 0) {
-      feedbackSummary = `User skipped ${skippedSlots.length} planned blocks over past days. Adjust scheduling away from frequently skipped hours.`;
+      feedbackNotes.push(`User skipped ${skippedSlots.length} planned blocks over past days.`);
     }
 
+    feedbackSummary = feedbackNotes.join(' ');
+
     const stats: ScheduleStats = {
-      streakDays,
+      streakDays: streakData.dailyAdherence.currentStreak,
+      longestStreakDays: streakData.dailyAdherence.longestStreak,
       dailyCompletionRate,
       weeklyCompletionRate,
       completedBlocksCount,
       totalBlocksCount,
+      categoryStreaks: streakData.categoryStreaks,
     };
 
     return NextResponse.json({
       stats,
       feedbackSummary,
       completionsByDate,
+      streakData,
     });
   } catch (error: any) {
     console.error('Error fetching schedule completions stats:', error);

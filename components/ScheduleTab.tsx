@@ -16,6 +16,7 @@ import {
   Sliders,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   TrendingUp,
   Tag,
   Trash2,
@@ -36,6 +37,7 @@ import {
   SchedulePreferences,
   EnergyLevel,
   EnergyLog,
+  BlockFeedback,
 } from '@/lib/types';
 import { AddEditFixedEventModal } from './AddEditFixedEventModal';
 import { AddEditTodoModal } from './AddEditTodoModal';
@@ -68,12 +70,16 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
   const [energyLogs, setEnergyLogs] = useState<EnergyLog[]>([]);
   const [slotPatterns, setSlotPatterns] = useState<Record<string, any>>({});
   const [activeEnergyPopoverBlockId, setActiveEnergyPopoverBlockId] = useState<string | null>(null);
+  const [activeFeedbackBlockId, setActiveFeedbackBlockId] = useState<string | null>(null);
+  const [showCategoryStreaks, setShowCategoryStreaks] = useState(false);
   const [stats, setStats] = useState<ScheduleStats>({
     streakDays: 0,
+    longestStreakDays: 0,
     dailyCompletionRate: 0,
     weeklyCompletionRate: 0,
     completedBlocksCount: 0,
     totalBlocksCount: 0,
+    categoryStreaks: [],
   });
   const [conflicts, setConflicts] = useState<ScheduleConflict[]>([]);
   const [preferences, setPreferences] = useState<SchedulePreferences | null>(null);
@@ -243,11 +249,14 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
       };
     });
 
+    // Open optional quick feedback prompt for this block
+    setActiveFeedbackBlockId(block.id);
+
     const slotHour = block.startTime.slice(0, 2) + ':00';
     const taggedEnergy = slotPatterns[slotHour]?.manualLevel || slotPatterns[slotHour]?.effectiveLevel || block.energyLevelRequired || null;
 
     try {
-      await fetch('/api/schedule/completions', {
+      const res = await fetch('/api/schedule/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -287,6 +296,49 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
       }
     } catch (err) {
       console.error('Failed to log completion:', err);
+    }
+  };
+
+  // Submit quick 1-tap feedback for a completed/skipped session
+  const handleSendFeedback = async (block: ScheduleBlock, feedback: BlockFeedback) => {
+    if (!isAuthenticated || !schedule) return;
+    setActiveFeedbackBlockId(null);
+
+    const slotHour = block.startTime.slice(0, 2) + ':00';
+    const taggedEnergy =
+      slotPatterns[slotHour]?.manualLevel ||
+      slotPatterns[slotHour]?.effectiveLevel ||
+      block.energyLevelRequired ||
+      null;
+
+    try {
+      const res = await fetch('/api/schedule/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scheduleId: schedule.id,
+          blockId: block.id,
+          date: selectedDate,
+          status: block.isCompleted ? 'completed' : 'skipped',
+          timeSlot: `${block.startTime}-${block.endTime}`,
+          energyLevel: taggedEnergy,
+          feedback,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.streaks) {
+          setStats((prev) => ({
+            ...prev,
+            streakDays: data.streaks.dailyAdherence.currentStreak,
+            longestStreakDays: data.streaks.dailyAdherence.longestStreak,
+            categoryStreaks: data.streaks.categoryStreaks,
+          }));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to submit session feedback:', err);
     }
   };
 
@@ -390,22 +442,51 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
               <h2 className="text-xl font-bold bg-gradient-to-r from-white via-zinc-100 to-zinc-400 bg-clip-text text-transparent">
                 Adaptive Timetable &amp; Schedule
               </h2>
-              {/* Gamified Streak Counter */}
+              {/* Gamified Daily Adherence Streak Counter (80%+ threshold) */}
               <div
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-all ${stats.streakDays > 0
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-all ${
+                  stats.streakDays > 0
                     ? 'bg-amber-500/10 border-amber-500/30 text-amber-300 shadow-sm shadow-amber-500/10'
                     : 'bg-zinc-800/80 border-zinc-700/60 text-zinc-400'
-                  }`}
-                title="Consecutive days maintaining 70%+ completed schedule blocks"
+                }`}
+                title="Consecutive days completing 80%+ of planned schedule blocks"
               >
                 <Flame
-                  className={`w-4 h-4 ${stats.streakDays > 0 ? 'text-amber-400 fill-amber-400 animate-pulse' : 'text-zinc-500'
-                    }`}
+                  className={`w-4 h-4 ${
+                    stats.streakDays > 0 ? 'text-amber-400 fill-amber-400 animate-pulse' : 'text-zinc-500'
+                  }`}
                 />
                 <span>
-                  {stats.streakDays > 0 ? `${stats.streakDays}-Day Streak!` : 'Start Streak Today'}
+                  {stats.streakDays > 0 ? `${stats.streakDays}-Day Streak` : '0-Day Streak'}
                 </span>
+                {stats.longestStreakDays !== undefined && (
+                  <span className="text-[10px] text-zinc-400 font-normal border-l border-zinc-700/80 pl-1.5 ml-0.5">
+                    Best: <strong className="text-zinc-300 font-semibold">{stats.longestStreakDays}d</strong>
+                  </span>
+                )}
               </div>
+
+              {/* Per-Category Streaks Toggle Button */}
+              {stats.categoryStreaks && stats.categoryStreaks.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowCategoryStreaks((prev) => !prev)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all cursor-pointer ${
+                    showCategoryStreaks
+                      ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300'
+                      : 'bg-zinc-800/70 border-zinc-700/60 text-zinc-400 hover:text-zinc-200'
+                  }`}
+                  title="Toggle recurring subject & category streaks"
+                >
+                  <Tag className="w-3 h-3 text-indigo-400" />
+                  <span>Subjects ({stats.categoryStreaks.length})</span>
+                  <ChevronDown
+                    className={`w-3 h-3 transition-transform duration-200 ${
+                      showCategoryStreaks ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+              )}
             </div>
             <p className="text-xs text-zinc-400">
               Reverse-planned work blocks around your classes, habits, and deadlines
@@ -511,6 +592,55 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Expandable Per-Category / Subject Streaks Tray */}
+        {showCategoryStreaks && (
+          <div className="mt-4 pt-4 border-t border-zinc-800/80 animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
+                <Tag className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Subject &amp; Task Category Streaks</span>
+              </span>
+              <span className="text-[11px] text-zinc-500">
+                Maintains consistency: breaks only when scheduled &amp; skipped
+              </span>
+            </div>
+            {stats.categoryStreaks && stats.categoryStreaks.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                {stats.categoryStreaks.map((cs) => (
+                  <div
+                    key={cs.category}
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-950/70 border border-zinc-800/70 text-xs"
+                  >
+                    <div className="space-y-0.5">
+                      <span className="font-semibold text-zinc-200 capitalize">{cs.category}</span>
+                      <span className="block text-[10px] text-zinc-500">
+                        {cs.lastCompletedDate ? `Last completed: ${cs.lastCompletedDate}` : 'In progress'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg">
+                      <Flame
+                        className={`w-3.5 h-3.5 ${
+                          cs.currentStreak > 0 ? 'text-amber-400 fill-amber-400' : 'text-zinc-500'
+                        }`}
+                      />
+                      <span className="font-bold text-amber-300 font-mono">{cs.currentStreak}d</span>
+                      {cs.longestStreak > cs.currentStreak && (
+                        <span className="text-[10px] text-zinc-500 pl-1 border-l border-zinc-700/60">
+                          Best {cs.longestStreak}d
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-zinc-500 py-1">
+                No category streaks active yet. Complete tasks or classes tagged with a category to start building streaks!
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 2. Schedule Conflicts & Deadline Risk Warnings Banner */}
@@ -911,6 +1041,50 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
                         )}
                       </div>
                     </div>
+
+                    {/* Optional 1-Tap Feedback Prompt */}
+                    {activeFeedbackBlockId === block.id && (
+                      <div className="mt-3 pt-3 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                        <div className="flex items-center gap-1.5 text-xs text-zinc-300 font-medium">
+                          <span>✨ How did this session feel?</span>
+                          <span className="text-[10px] text-zinc-500">(1-tap feedback)</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleSendFeedback(block, 'great')}
+                            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 transition-all cursor-pointer flex items-center gap-1"
+                            title="Felt energized, completed smoothly"
+                          >
+                            <span>⚡ Energized</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSendFeedback(block, 'good')}
+                            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 transition-all cursor-pointer flex items-center gap-1"
+                            title="Normal, steady progress"
+                          >
+                            <span>👍 Good</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSendFeedback(block, 'tough')}
+                            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition-all cursor-pointer flex items-center gap-1"
+                            title="Exhausting or distracting slot"
+                          >
+                            <span>😴 Draining</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveFeedbackBlockId(null)}
+                            className="p-1 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-all cursor-pointer text-xs ml-1"
+                            title="Dismiss"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}

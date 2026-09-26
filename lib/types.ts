@@ -219,6 +219,8 @@ export interface GeneratedSchedule {
   createdAt?: string;
 }
 
+export type BlockFeedback = 'great' | 'good' | 'tough';
+
 export interface ScheduleCompletion {
   id: string;
   userId?: string;
@@ -226,17 +228,26 @@ export interface ScheduleCompletion {
   blockId: string;
   date: string;
   status: 'completed' | 'skipped' | 'pending';
+  feedback?: BlockFeedback | null;
   timeSlot?: string;
   actionAt?: string;
 }
 
+export interface CategoryStreak {
+  category: string;
+  currentStreak: number;
+  longestStreak: number;
+  lastCompletedDate?: string | null;
+}
+
 export interface ScheduleStats {
   streakDays: number;
+  longestStreakDays?: number;
   dailyCompletionRate: number; // 0 - 100
   weeklyCompletionRate: number; // 0 - 100
   completedBlocksCount: number;
   totalBlocksCount: number;
-  categoryStreaks?: Record<string, number>;
+  categoryStreaks?: CategoryStreak[];
 }
 
 

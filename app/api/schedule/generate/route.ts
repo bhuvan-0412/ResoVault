@@ -275,6 +275,7 @@ ${JSON.stringify(
 
 4. Hourly Energy Rhythm Map for ${dateStr} (06:00 to 23:00):
 ${JSON.stringify(energyMap, null, 2)}
+Feedback & Fatigue Insights: ${feedbackNotes}
 
 5. Stated Habits & Preferences:
 - Wake time: ${preferences?.wake_time || '08:00'}
@@ -288,9 +289,9 @@ SCHEDULING RULES:
 2. REVERSE-PLANNING & PRIORITIZATION:
    - Work backward from each deadline's due_date. Prioritize deadlines due sooner and marked 'high' priority.
    - Reason about tradeoffs if deadlines compete (e.g. allocate time for the closer deadline first).
-3. ENERGY-AWARE SCHEDULING:
-   - Avoid scheduling high-effort/heavy cognitive tasks in slots where energy is tagged or learned as 'low'.
-   - If a low-energy slot must be used (e.g. no other time available before an urgent deadline), schedule something lighter (review, reading, outline) instead of leaving it idle.
+3. ENERGY-AWARE & FEEDBACK-ADAPTIVE SCHEDULING:
+   - Avoid scheduling high-effort/heavy cognitive tasks in slots where energy is tagged or learned as 'low', or noted as fatigued.
+   - If a low-energy or fatigued slot must be used (e.g. no other time available before an urgent deadline), schedule something lighter (review, reading, outline) instead of leaving it idle.
 4. HEALTHY PACING & BREAKS:
    - Include 10-15 min buffers/breaks between work sessions.
    - Do NOT pack blocks back-to-back at 100% utilization.
@@ -539,12 +540,13 @@ export async function POST(req: Request) {
       targetDateStr
     );
 
-    // 6. Fetch Energy Profile for this user and date
+    // 6. Fetch Energy Profile & Feedback Loop Patterns
     const energyMap: Record<string, EnergyLevel> = {};
+    const fatiguedSlots: string[] = [];
     try {
       const { data: energyRows } = await supabase
         .from('energy_logs')
-        .select('time_block, energy_level, derived_score')
+        .select('time_block, energy_level, derived_score, notes')
         .eq('user_id', userId)
         .or(`date.eq.${targetDateStr},derived_score.not.is.null`);
 
@@ -559,7 +561,18 @@ export async function POST(req: Request) {
             const score = Number(row.derived_score);
             if (score >= 0.75) energyMap[slot] = 'high';
             else if (score >= 0.4) energyMap[slot] = 'medium';
-            else energyMap[slot] = 'low';
+            else {
+              energyMap[slot] = 'low';
+              if (!fatiguedSlots.includes(slot)) fatiguedSlots.push(slot);
+            }
+          }
+          if (
+            row.notes &&
+            typeof row.notes === 'string' &&
+            row.notes.toLowerCase().includes('fatigue') &&
+            !fatiguedSlots.includes(slot)
+          ) {
+            fatiguedSlots.push(slot);
           }
         });
       }
@@ -580,7 +593,10 @@ export async function POST(req: Request) {
       peak_energy: 'morning',
     };
 
-    const feedbackNotes = `Energy map loaded with ${Object.keys(energyMap).length} configured slots.`;
+    const feedbackNotes =
+      fatiguedSlots.length > 0
+        ? `Learned fatigue slots from session feedback: ${fatiguedSlots.join(', ')}. Avoid high-effort blocks during these windows.`
+        : `Energy map loaded with ${Object.keys(energyMap).length} configured slots.`;
 
     // 8. Generate Schedule via LLM (with heuristic fallback)
     const params: HeuristicParams = {
