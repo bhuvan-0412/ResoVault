@@ -513,37 +513,80 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
         </div>
       </div>
 
-      {/* 2. Overlapping Fixed Events Conflict Warning Banner */}
+      {/* 2. Schedule Conflicts & Deadline Risk Warnings Banner */}
       {conflicts.length > 0 && (
-        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 shadow-lg animate-in fade-in duration-200">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0 text-amber-300 mt-0.5">
-              <AlertTriangle className="w-4 h-4" />
-            </div>
-            <div className="flex-1">
-              <h4 className="text-sm font-bold text-amber-200 flex items-center gap-2">
-                Commitment Conflict Detected
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold">
-                  {conflicts.length} Overlap{conflicts.length !== 1 ? 's' : ''}
-                </span>
-              </h4>
-              <div className="mt-2 space-y-1.5">
-                {conflicts.map((c, i) => (
-                  <p key={i} className="text-xs text-amber-300/90 leading-relaxed font-mono">
-                    • {c.message}
-                  </p>
-                ))}
+        <div className="space-y-3 animate-in fade-in duration-200">
+          {/* Overlapping Recurring Classes */}
+          {conflicts.some((c) => c.type === 'overlapping_classes' || (!c.type && c.overlapMinutes)) && (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 shadow-lg">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0 text-amber-300 mt-0.5">
+                  <AlertTriangle className="w-4 h-4" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-sm font-bold text-amber-200 flex items-center gap-2">
+                    Recurring Commitment Overlap
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold">
+                      Locked Conflict
+                    </span>
+                  </h4>
+                  <div className="mt-2 space-y-1.5">
+                    {conflicts
+                      .filter((c) => c.type === 'overlapping_classes' || (!c.type && c.overlapMinutes))
+                      .map((c, i) => (
+                        <p key={i} className="text-xs text-amber-300/90 leading-relaxed font-mono">
+                          • {c.message}
+                        </p>
+                      ))}
+                  </div>
+                  <div className="mt-3 flex items-center gap-3">
+                    <button
+                      onClick={() => setActiveSubView('fixed')}
+                      className="px-3.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-xs font-semibold border border-amber-500/30 transition-colors cursor-pointer"
+                    >
+                      Manage Fixed Classes
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div className="mt-3 flex items-center gap-3">
-                <button
-                  onClick={() => setActiveSubView('fixed')}
-                  className="px-3.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-xs font-semibold border border-amber-500/30 transition-colors cursor-pointer"
-                >
-                  Manage Recurring Commitments
-                </button>
+            </div>
+          )}
+
+          {/* Unachievable Deadlines Warning */}
+          {conflicts.some((c) => c.type === 'unachievable_deadline') && (
+            <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 shadow-lg">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center shrink-0 text-rose-300 mt-0.5">
+                  <ShieldAlert className="w-4 h-4" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-sm font-bold text-rose-200 flex items-center gap-2">
+                    Deadline Risk: Insufficient Available Time
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 font-semibold">
+                      Action Required
+                    </span>
+                  </h4>
+                  <div className="mt-2 space-y-1.5">
+                    {conflicts
+                      .filter((c) => c.type === 'unachievable_deadline')
+                      .map((c, i) => (
+                        <p key={i} className="text-xs text-rose-300/90 leading-relaxed font-mono">
+                          • {c.message}
+                        </p>
+                      ))}
+                  </div>
+                  <div className="mt-3 flex items-center gap-3">
+                    <button
+                      onClick={() => setActiveSubView('todos')}
+                      className="px-3.5 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 text-xs font-semibold border border-rose-500/30 transition-colors cursor-pointer"
+                    >
+                      Review Deadlines &amp; Tasks Backlog
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 

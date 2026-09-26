@@ -17,35 +17,68 @@ export async function GET(req: Request) {
 
     const supabase = createServiceRoleSupabaseClient();
 
-    // Target date: Tomorrow
-    const tomorrow = new Date();
+    // Target dates: Today and Tomorrow (daily early morning generation for the day ahead)
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+
+    const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
-    // Fetch distinct users who have fixed events or todos
-    const { data: activeUsers, error: userErr } = await supabase
-      .from('fixed_events')
-      .select('user_id');
+    // Fetch distinct users who have fixed classes, deadlines, or legacy items
+    const userIdsSet = new Set<string>();
 
-    if (userErr) throw userErr;
+    try {
+      const { data: fcUsers } = await supabase.from('fixed_classes').select('user_id');
+      (fcUsers || []).forEach((u: any) => userIdsSet.add(u.user_id));
+    } catch (e) {}
 
-    const userIds = Array.from(new Set((activeUsers || []).map((u) => u.user_id)));
+    try {
+      const { data: dlUsers } = await supabase.from('deadlines').select('user_id');
+      (dlUsers || []).forEach((u: any) => userIdsSet.add(u.user_id));
+    } catch (e) {}
 
+    try {
+      const { data: feUsers } = await supabase.from('fixed_events').select('user_id');
+      (feUsers || []).forEach((u: any) => userIdsSet.add(u.user_id));
+    } catch (e) {}
+
+    try {
+      const { data: todoUsers } = await supabase.from('todos').select('user_id');
+      (todoUsers || []).forEach((u: any) => userIdsSet.add(u.user_id));
+    } catch (e) {}
+
+    const userIds = Array.from(userIdsSet);
     let generatedCount = 0;
 
     for (const userId of userIds) {
       try {
-        // Trigger generation for each user via internal call or generation service
         const host = req.headers.get('host') || 'localhost:3000';
         const proto = host.includes('localhost') ? 'http' : 'https';
         const url = `${proto}://${host}/api/schedule/generate`;
 
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'x-cron-user-id': userId,
+        };
+        if (cronSecret) {
+          headers['authorization'] = `Bearer ${cronSecret}`;
+        }
+
+        // Generate for today (without touching completed blocks)
         await fetch(url, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-cron-user-id': userId,
-          },
+          headers,
+          body: JSON.stringify({
+            date: todayStr,
+            forceRegenerate: true,
+          }),
+        }).catch(console.warn);
+
+        // Generate for tomorrow
+        await fetch(url, {
+          method: 'POST',
+          headers,
           body: JSON.stringify({
             date: tomorrowStr,
             forceRegenerate: true,
@@ -60,8 +93,9 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: `Completed daily schedule generation for ${generatedCount} user(s) for ${tomorrowStr}`,
-      date: tomorrowStr,
+      message: `Completed daily schedule generation for ${generatedCount} user(s) for ${todayStr} & ${tomorrowStr}`,
+      today: todayStr,
+      tomorrow: tomorrowStr,
       usersProcessed: generatedCount,
     });
   } catch (error: any) {

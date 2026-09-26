@@ -187,10 +187,16 @@ export interface ParsedCandidateItem {
   selected: boolean;
 }
 
+export type ConflictType = 'overlapping_classes' | 'unachievable_deadline';
+
 export interface ScheduleConflict {
-  event1: FixedClass;
-  event2: FixedClass;
-  overlapMinutes: number;
+  type?: ConflictType;
+  event1?: FixedClass;
+  event2?: FixedClass;
+  deadline?: Deadline;
+  overlapMinutes?: number;
+  requiredMinutes?: number;
+  availableMinutes?: number;
   message: string;
 }
 
