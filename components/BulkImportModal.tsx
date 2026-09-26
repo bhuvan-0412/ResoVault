@@ -182,23 +182,23 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
   const duplicateCount = reviewItems.filter((i) => i.isDuplicate).length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[90vh]">
         
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-950/60 shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-zinc-800 bg-zinc-950/60 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20 shrink-0">
               <Zap className="w-5 h-5 fill-current" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-zinc-100">AI Bulk Import</h2>
+                <h2 className="text-base sm:text-lg font-bold text-zinc-100">AI Bulk Import</h2>
                 <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
                   Fast Batch
                 </span>
               </div>
-              <p className="text-xs text-zinc-400">
+              <p className="text-xs text-zinc-400 hidden sm:block">
                 Paste raw chat text or link lists — auto-scraped &amp; AI categorized in seconds.
               </p>
             </div>
@@ -207,8 +207,9 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
           <div className="flex items-center gap-2">
             {step === 'input' && (
               <button
+                type="button"
                 onClick={() => setShowSettings(!showSettings)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
                   apiKey
                     ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30'
                     : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-zinc-200'
@@ -216,14 +217,16 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                 title="AI Key Settings"
               >
                 <Key className="w-3.5 h-3.5" />
-                <span>{apiKey ? 'AI Key Saved' : 'AI Settings'}</span>
+                <span className="hidden sm:inline">{apiKey ? 'AI Key Saved' : 'AI Settings'}</span>
                 {showSettings ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
               </button>
             )}
 
             <button
+              type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+              className="min-w-[36px] min-h-[36px] p-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors flex items-center justify-center cursor-pointer"
+              aria-label="Close"
             >
               <X className="w-5 h-5" />
             </button>
@@ -232,7 +235,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
 
         {/* STEP 1: RAW TEXTINPUT VIEW */}
         {step === 'input' && (
-          <div className="p-6 overflow-y-auto space-y-4 flex-1">
+          <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
             
             {/* Optional AI Key Settings Drawer */}
             {showSettings && (
@@ -285,31 +288,31 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                 Paste Raw Unstructured Text
               </label>
               <textarea
-                rows={10}
+                rows={9}
                 value={rawText}
                 onChange={(e) => setRawText(e.target.value)}
                 placeholder={`Paste WhatsApp chats, emails, or link lists here...\n\nExample:\nHey! Check out this React documentation: https://github.com/facebook/react\nHere is our Q3 project drive: https://drive.google.com/drive/folders/...\nAlso read this styling guide: https://tailwindcss.com/docs`}
-                className="w-full px-4 py-3 bg-zinc-950 text-zinc-100 placeholder-zinc-500 text-sm rounded-xl border border-zinc-800 focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition-all resize-none font-mono"
+                className="w-full px-3.5 sm:px-4 py-3 bg-zinc-950 text-zinc-100 placeholder-zinc-500 text-base sm:text-sm rounded-xl border border-zinc-800 focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition-all resize-none font-mono"
                 autoFocus
               />
             </div>
 
-            <div className="flex items-center justify-between pt-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
               <div className="text-xs text-zinc-500">
                 Supports WhatsApp text, Slack messages, emails, or raw URL lists.
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
+                  className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={handleExtractAndAnalyze}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-sm font-semibold shadow-lg shadow-indigo-600/25 active:scale-95 transition-all"
+                  className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-sm font-semibold shadow-lg shadow-indigo-600/25 active:scale-95 transition-all cursor-pointer"
                 >
                   <Sparkles className="w-4 h-4" />
                   Extract &amp; Analyze Links
@@ -425,7 +428,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                             value={item.title}
                             onChange={(e) => handleUpdateRowField(item.id, 'title', e.target.value)}
                             placeholder="Resource Title"
-                            className="w-full px-2.5 py-1.5 bg-zinc-950 text-zinc-100 text-xs rounded-lg border border-zinc-800 focus:border-indigo-500 focus:outline-none"
+                            className="w-full px-2.5 py-2 sm:py-1.5 bg-zinc-950 text-zinc-100 text-base sm:text-xs rounded-lg border border-zinc-800 focus:border-indigo-500 focus:outline-none"
                           />
                         </div>
 
@@ -434,7 +437,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                           <select
                             value={item.category}
                             onChange={(e) => handleUpdateRowField(item.id, 'category', e.target.value)}
-                            className="w-full px-2.5 py-1.5 bg-zinc-950 text-zinc-100 text-xs rounded-lg border border-zinc-800 focus:border-indigo-500 focus:outline-none"
+                            className="w-full px-2.5 py-2 sm:py-1.5 bg-zinc-950 text-zinc-100 text-base sm:text-xs rounded-lg border border-zinc-800 focus:border-indigo-500 focus:outline-none cursor-pointer"
                           >
                             {existingCategories.map((cat) => (
                               <option key={cat} value={cat}>
@@ -460,7 +463,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                               )
                             }
                             placeholder="Tags (comma sep)"
-                            className="w-full px-2.5 py-1.5 bg-zinc-950 text-zinc-100 text-xs rounded-lg border border-zinc-800 focus:border-indigo-500 focus:outline-none"
+                            className="w-full px-2.5 py-2 sm:py-1.5 bg-zinc-950 text-zinc-100 text-base sm:text-xs rounded-lg border border-zinc-800 focus:border-indigo-500 focus:outline-none"
                           />
                         </div>
 
@@ -473,20 +476,20 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
             </div>
 
             {/* Modal Footer Bar */}
-            <div className="px-6 py-4 border-t border-zinc-800 bg-zinc-950/60 flex items-center justify-between shrink-0">
+            <div className="p-3.5 sm:px-6 sm:py-4 border-t border-zinc-800 bg-zinc-950/60 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
               <button
                 type="button"
                 onClick={() => setStep('input')}
-                className="text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition-colors"
+                className="text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition-colors text-center cursor-pointer py-1"
               >
                 ← Back to Raw Text
               </button>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
+                  className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -494,7 +497,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                   type="button"
                   disabled={selectedCount === 0}
                   onClick={handleSaveAllSelected}
-                  className={`flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-all ${
+                  className={`flex items-center justify-center gap-2 px-5 py-2.5 sm:py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
                     selectedCount > 0
                       ? 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-lg shadow-indigo-600/25 active:scale-95'
                       : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'

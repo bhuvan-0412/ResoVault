@@ -198,33 +198,35 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[90vh]">
         
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-950/50">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-zinc-800 bg-zinc-950/50">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
               <LinkIcon className="w-4 h-4" />
             </div>
-            <h2 className="text-lg font-bold text-zinc-100">
+            <h2 className="text-base sm:text-lg font-bold text-zinc-100">
               {editingResource ? 'Edit Resource' : 'Add New Resource'}
             </h2>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+            className="min-w-[36px] min-h-[36px] p-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors flex items-center justify-center cursor-pointer"
+            aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Modal Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 flex-1">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
           
           {/* URL Field (Required) */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
               <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider">
                 URL / Link <span className="text-rose-400">*</span>
               </label>
@@ -233,7 +235,7 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
                   type="button"
                   onClick={() => handleAutoFetch()}
                   disabled={isFetchingMeta}
-                  className="text-xs font-medium text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors disabled:opacity-60"
+                  className="text-xs font-medium text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors disabled:opacity-60 cursor-pointer"
                   title="Auto-fetch Title & Notes using Open Graph or YouTube oEmbed"
                 >
                   {isFetchingMeta ? (
@@ -263,7 +265,7 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
                 }}
                 onBlur={handleUrlBlur}
                 placeholder="e.g. https://youtube.com/watch?v=... or github.com/user/repo"
-                className={`w-full px-3.5 py-2.5 bg-zinc-950 text-zinc-100 placeholder-zinc-500 text-sm rounded-xl border ${
+                className={`w-full px-3.5 py-2.5 bg-zinc-950 text-zinc-100 placeholder-zinc-500 text-base sm:text-sm rounded-xl border ${
                   errors.url ? 'border-rose-500/80 focus:ring-rose-500/20' : 'border-zinc-800 focus:border-indigo-500/80 focus:ring-indigo-500/20'
                 } focus:outline-none focus:ring-2 transition-all`}
                 autoFocus
@@ -284,7 +286,7 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
 
           {/* Title Field (Auto-extracted or custom) */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
               <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider">
                 Title <span className="text-zinc-500 font-normal lowercase">(auto-extracted if left blank)</span>
               </label>
@@ -300,13 +302,13 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Leave blank to auto-fetch, or enter custom title"
-              className="w-full px-3.5 py-2.5 bg-zinc-950 text-zinc-100 placeholder-zinc-500 text-sm rounded-xl border border-zinc-800 focus:border-indigo-500/80 focus:ring-indigo-500/20 focus:outline-none focus:ring-2 transition-all"
+              className="w-full px-3.5 py-2.5 bg-zinc-950 text-zinc-100 placeholder-zinc-500 text-base sm:text-sm rounded-xl border border-zinc-800 focus:border-indigo-500/80 focus:ring-indigo-500/20 focus:outline-none focus:ring-2 transition-all"
             />
           </div>
 
           {/* Category Selector (Existing Dropdown OR Dynamic Custom Category on the fly) */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
               <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider">
                 Category
               </label>
@@ -316,7 +318,7 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
                   setIsCreatingNewCategory(!isCreatingNewCategory);
                   setNewCategoryInput('');
                 }}
-                className="text-xs text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1 transition-colors"
+                className="text-xs text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1 transition-colors cursor-pointer"
               >
                 {isCreatingNewCategory ? (
                   'Pick from existing list'
@@ -335,7 +337,7 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
                   value={newCategoryInput}
                   onChange={(e) => setNewCategoryInput(e.target.value)}
                   placeholder="Enter new category name (e.g. Research, Finance, Books)"
-                  className="w-full px-3.5 py-2.5 bg-zinc-950 text-zinc-100 placeholder-zinc-500 text-sm rounded-xl border border-indigo-500/60 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition-all"
+                  className="w-full px-3.5 py-2.5 bg-zinc-950 text-zinc-100 placeholder-zinc-500 text-base sm:text-sm rounded-xl border border-indigo-500/60 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition-all"
                   autoFocus
                 />
               </div>
@@ -350,7 +352,7 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
                     setCategory(e.target.value);
                   }
                 }}
-                className="w-full px-3.5 py-2.5 bg-zinc-950 text-zinc-100 text-sm rounded-xl border border-zinc-800 focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition-all"
+                className="w-full px-3.5 py-2.5 bg-zinc-950 text-zinc-100 text-base sm:text-sm rounded-xl border border-zinc-800 focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition-all cursor-pointer"
               >
                 {existingCategories.map((cat) => (
                   <option key={cat} value={cat}>
@@ -379,7 +381,7 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
                   <button
                     type="button"
                     onClick={() => handleRemoveTag(tag)}
-                    className="hover:text-rose-400 transition-colors"
+                    className="hover:text-rose-400 transition-colors cursor-pointer"
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -394,13 +396,13 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={handleTagKeyDown}
                 placeholder="Type tag and press Enter (e.g. react, docs, finance)"
-                className="w-full px-3.5 py-2 bg-zinc-950 text-zinc-100 placeholder-zinc-500 text-sm rounded-xl border border-zinc-800 focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition-all"
+                className="w-full px-3.5 py-2.5 bg-zinc-950 text-zinc-100 placeholder-zinc-500 text-base sm:text-sm rounded-xl border border-zinc-800 focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition-all"
               />
             </div>
 
             {/* Quick suggested existing tags */}
             {existingTags.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-2">
+              <div className="flex flex-wrap gap-1.5 mt-2">
                 <span className="text-[11px] text-zinc-500 self-center mr-1">Suggestions:</span>
                 {existingTags
                   .filter((t) => !tags.includes(t))
@@ -410,7 +412,7 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
                       key={tag}
                       type="button"
                       onClick={() => handleAddTag(tag)}
-                      className="text-[11px] text-zinc-400 hover:text-indigo-300 bg-zinc-950/80 hover:bg-zinc-800 px-2 py-0.5 rounded-md border border-zinc-800 transition-colors"
+                      className="text-[11px] text-zinc-400 hover:text-indigo-300 bg-zinc-950/80 hover:bg-zinc-800 px-2 py-0.5 rounded-md border border-zinc-800 transition-colors cursor-pointer"
                     >
                       +{tag}
                     </button>
@@ -429,22 +431,22 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Short note or summary of what this link contains..."
-              className="w-full px-3.5 py-2.5 bg-zinc-950 text-zinc-100 placeholder-zinc-500 text-sm rounded-xl border border-zinc-800 focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition-all resize-none"
+              className="w-full px-3.5 py-2.5 bg-zinc-950 text-zinc-100 placeholder-zinc-500 text-base sm:text-sm rounded-xl border border-zinc-800 focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition-all resize-none"
             />
           </div>
 
           {/* Footer Actions */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-800">
+          <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 pt-4 border-t border-zinc-800">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
+              className="px-4 py-2.5 sm:py-2 text-sm font-medium text-zinc-400 hover:text-zinc-200 transition-colors text-center cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-sm font-semibold shadow-lg shadow-indigo-600/25 active:scale-95 transition-all"
+              className="px-5 py-2.5 sm:py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-sm font-semibold shadow-lg shadow-indigo-600/25 active:scale-95 transition-all text-center cursor-pointer"
             >
               {editingResource ? 'Save Changes' : 'Add Resource'}
             </button>

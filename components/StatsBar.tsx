@@ -13,6 +13,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { SortOption, CategoryStat } from '@/lib/types';
+import { getCategoryStyle } from '@/lib/utils';
 
 interface StatsBarProps {
   totalResources: number;
@@ -91,14 +92,14 @@ export const StatsBar: React.FC<StatsBarProps> = ({
         </div>
 
         {/* Sort Selector */}
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <span className="text-xs text-zinc-500 font-medium hidden md:inline">Sort:</span>
-          <div className="flex items-center gap-1.5 bg-zinc-950 px-2 py-1 rounded-lg border border-zinc-800">
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
+          <span className="text-xs text-zinc-500 font-medium">Sort:</span>
+          <div className="flex items-center gap-1.5 bg-zinc-950 px-2.5 py-1.5 rounded-lg border border-zinc-800 flex-1 sm:flex-initial">
             <ArrowUpDown className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
             <select
               value={sortOption}
               onChange={(e) => setSortOption(e.target.value as SortOption)}
-              className="bg-transparent text-zinc-200 text-xs font-medium focus:outline-none cursor-pointer"
+              className="bg-transparent text-zinc-200 text-xs font-medium focus:outline-none cursor-pointer w-full"
             >
               <option value="newest" className="bg-zinc-900 text-zinc-100">Recently Added (Newest)</option>
               <option value="oldest" className="bg-zinc-900 text-zinc-100">Oldest First</option>
@@ -114,7 +115,7 @@ export const StatsBar: React.FC<StatsBarProps> = ({
       </div>
 
       {/* Lower Filter Controls: Category Single-Select Dropdown & Tag Multi-Select Filter with AND/OR */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 bg-zinc-900/40 p-2.5 sm:px-3.5 rounded-xl border border-zinc-800/60 text-xs">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-zinc-900/40 p-3 sm:px-4 rounded-xl border border-zinc-800/60 text-xs">
         
         {/* Left Side: Category Single-Select Dropdown */}
         <div className="flex items-center gap-2 flex-wrap">
@@ -140,16 +141,23 @@ export const StatsBar: React.FC<StatsBarProps> = ({
             </select>
           </div>
 
-          {activeCategory && (
-            <button
-              onClick={() => onSelectCategory(null)}
-              className="inline-flex items-center gap-1 px-1.5 py-1 text-[11px] text-zinc-400 hover:text-rose-300 bg-zinc-800/60 hover:bg-rose-500/10 rounded-md border border-zinc-700/50 transition-colors cursor-pointer"
-              title="Clear category filter"
-            >
-              <span>Clear</span>
-              <X className="w-3 h-3" />
-            </button>
-          )}
+          {activeCategory && (() => {
+            const catStyle = getCategoryStyle(activeCategory);
+            return (
+              <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg border ${catStyle.badge}`}>
+                <span className={`w-2 h-2 rounded-full ${catStyle.dot}`} />
+                <span>{activeCategory}</span>
+                <button
+                  type="button"
+                  onClick={() => onSelectCategory(null)}
+                  className="hover:opacity-75 transition-opacity ml-1 cursor-pointer"
+                  title="Clear category filter"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            );
+          })()}
         </div>
 
         {/* Right Side: Multi-Select Tag Filter with AND/OR Toggle */}
@@ -205,9 +213,9 @@ export const StatsBar: React.FC<StatsBarProps> = ({
               <ChevronDown className="w-3 h-3 text-zinc-500 ml-0.5" />
             </button>
 
-            {/* Dropdown Popover */}
+            {/* Dropdown Popover (with mobile safe-viewport constraints) */}
             {isTagDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-64 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl p-2.5 z-40 animate-in fade-in zoom-in-95 duration-100">
+              <div className="absolute right-0 sm:right-0 mt-2 w-64 max-w-[calc(100vw-2.5rem)] bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl p-2.5 z-40 animate-in fade-in zoom-in-95 duration-100">
                 <div className="mb-2">
                   <input
                     type="text"

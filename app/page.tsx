@@ -13,6 +13,8 @@ import { StatsBar } from '@/components/StatsBar';
 import { AuthModal } from '@/components/AuthModal';
 import { NewsDigestTab } from '@/components/NewsDigestTab';
 import { ScheduleTab } from '@/components/ScheduleTab';
+import { ToastContainer, ToastItem } from '@/components/Toast';
+import { ResourceSkeleton } from '@/components/ResourceSkeleton';
 import { Resource, ViewMode, SortOption, CategoryStat, User, AppTab, NewsArticle } from '@/lib/types';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import Fuse from 'fuse.js';
@@ -65,6 +67,18 @@ export default function Home() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+
+  // Toast notifications state
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  const showToast = useCallback((message: string, type: ToastItem['type'] = 'success', subtext?: string) => {
+    const id = `toast-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    setToasts((prev) => [...prev, { id, message, type, subtext }]);
+  }, []);
+
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   const supabaseReady = isSupabaseConfigured();
 
@@ -229,12 +243,13 @@ export default function Home() {
     setResources((prev) =>
       prev.map((r) => (r.id === resourceId ? { ...r, isPinned: nextPinned } : r))
     );
+    showToast(nextPinned ? 'Pinned resource to top' : 'Unpinned resource', 'pin');
     try {
       await togglePinResource(resourceId, nextPinned);
     } catch (e) {
       console.warn('Failed to toggle pin on Supabase:', e);
     }
-  }, []);
+  }, [showToast]);
 
   // Click tracking handler: increment click counter, update lastOpenedAt, and persist
   const handleResourceClick = useCallback(async (resourceId: string) => {
@@ -367,10 +382,12 @@ export default function Home() {
       // Editing existing resource in Supabase
       const updated = await updateResource(resourceData as Resource);
       setResources((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      showToast('Resource updated successfully', 'success');
     } else {
       // Adding new resource in Supabase
       const created = await createResource(resourceData);
       setResources((prev) => [created, ...prev]);
+      showToast('Resource added to vault', 'success');
     }
     // Refresh categories in background
     fetchCategories().then(setUserCategories).catch(console.warn);
@@ -381,6 +398,7 @@ export default function Home() {
     const success = await deleteResource(deletingId);
     if (success) {
       setResources((prev) => prev.filter((r) => r.id !== deletingId));
+      showToast('Resource removed from vault', 'delete');
     }
     setDeletingId(null);
     fetchCategories().then(setUserCategories).catch(console.warn);
@@ -398,6 +416,7 @@ export default function Home() {
     try {
       const saved = await bulkSaveResources(items);
       setResources((prev) => [...saved, ...prev]);
+      showToast(`Imported ${saved.length} resources successfully`, 'success');
       fetchCategories().then(setUserCategories).catch(console.warn);
     } catch (err) {
       console.error('Failed to bulk save items to Supabase:', err);
@@ -425,6 +444,7 @@ export default function Home() {
         }))
       );
       setResources((prev) => [...saved, ...prev]);
+      showToast(`Restored ${saved.length} resources from backup`, 'success');
       fetchCategories().then(setUserCategories).catch(console.warn);
     } catch (err) {
       console.error('Failed to import backup file to Supabase:', err);
@@ -450,6 +470,7 @@ export default function Home() {
         isPinned: false,
       });
       setResources((prev) => [saved, ...prev]);
+      showToast('Saved news article to vault', 'success');
       fetchCategories().then(setUserCategories).catch(console.warn);
     } catch (err) {
       console.error('Failed to save news article to vault:', err);
@@ -685,9 +706,12 @@ export default function Home() {
 
         {/* Main Content Area */}
         {authLoading || (user && loading) ? (
-          <div className="py-24 flex flex-col items-center justify-center text-zinc-500 gap-3">
-            <RefreshCw className="w-8 h-8 animate-spin text-indigo-500" />
-            <p className="text-sm font-medium">Loading your Supabase cloud resources...</p>
+          <div className="space-y-4 py-2">
+            <div className="flex items-center gap-2 text-xs text-zinc-400 font-medium">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+              <span>Loading cloud vault resources...</span>
+            </div>
+            <ResourceSkeleton viewMode={viewMode} count={6} />
           </div>
         ) : user && filteredResources.length > 0 ? (
           viewMode === 'grid' ? (
@@ -703,6 +727,7 @@ export default function Home() {
                   onDelete={(id) => setDeletingId(id)}
                   onTogglePin={handleTogglePin}
                   onResourceClick={handleResourceClick}
+                  onCopySuccess={() => showToast('Link copied to clipboard', 'copy')}
                   onTagClick={(tag) => handleToggleTag(tag)}
                   onCategoryClick={(cat) => setActiveCategory(cat)}
                 />
@@ -721,6 +746,7 @@ export default function Home() {
                   onDelete={(id) => setDeletingId(id)}
                   onTogglePin={handleTogglePin}
                   onResourceClick={handleResourceClick}
+                  onCopySuccess={() => showToast('Link copied to clipboard', 'copy')}
                   onTagClick={(tag) => handleToggleTag(tag)}
                   onCategoryClick={(cat) => setActiveCategory(cat)}
                 />
@@ -729,40 +755,56 @@ export default function Home() {
           )
         ) : user ? (
           /* Empty Vault State */
-          <div className="py-16 px-4 text-center bg-zinc-900/40 border border-zinc-800/80 rounded-2xl max-w-md mx-auto my-8">
-            <div className="w-12 h-12 rounded-2xl bg-zinc-800 border border-zinc-700/50 flex items-center justify-center mx-auto mb-3 text-zinc-400">
-              <Search className="w-6 h-6" />
+          <div className="py-16 px-6 text-center bg-zinc-900/40 border border-zinc-800/80 rounded-2xl max-w-lg mx-auto my-8 animate-in fade-in duration-200">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-500/10 to-violet-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4 text-indigo-400 shadow-inner">
+              {searchQuery || activeCategory || selectedTags.length > 0 ? (
+                <Search className="w-6 h-6" />
+              ) : (
+                <Bookmark className="w-6 h-6" />
+              )}
             </div>
-            <h3 className="text-base font-bold text-zinc-200 mb-1">No resources found</h3>
-            <p className="text-xs text-zinc-400 mb-5">
-              {searchQuery || activeCategory
-                ? 'Try adjusting your search criteria or category filter.'
+            <h3 className="text-base sm:text-lg font-bold text-zinc-100 mb-1.5">
+              {searchQuery || activeCategory || selectedTags.length > 0
+                ? 'No matching resources found'
+                : 'Your Vault is empty'}
+            </h3>
+            <p className="text-xs text-zinc-400 mb-6 leading-relaxed max-w-sm mx-auto">
+              {searchQuery || activeCategory || selectedTags.length > 0
+                ? `No resources match your active search or filters${
+                    activeCategory ? ` in category "${activeCategory}"` : ''
+                  }${searchQuery ? ` for "${searchQuery}"` : ''}${
+                    selectedTags.length > 0 ? ` with tags #${selectedTags.join(', #')}` : ''
+                  }. Try adjusting or clearing your filters.`
                 : 'Your Supabase cloud vault is ready! Add your first link or bulk import links from text.'}
             </p>
-            {searchQuery || activeCategory ? (
+            {searchQuery || activeCategory || selectedTags.length > 0 ? (
               <button
+                type="button"
                 onClick={() => {
                   setSearchQuery('');
                   setActiveCategory(null);
+                  setSelectedTags([]);
                 }}
-                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold border border-zinc-700 transition-all cursor-pointer"
+                className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold border border-zinc-700 transition-all cursor-pointer shadow-sm hover:shadow"
               >
                 Clear Search &amp; Filters
               </button>
             ) : (
-              <div className="flex items-center justify-center gap-2">
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5">
                 <button
+                  type="button"
                   onClick={() => {
                     setEditingResource(null);
                     setIsAddModalOpen(true);
                   }}
-                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/20 transition-all cursor-pointer"
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/20 transition-all cursor-pointer"
                 >
                   + Add Your First Link
                 </button>
                 <button
+                  type="button"
                   onClick={() => setIsBulkModalOpen(true)}
-                  className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold border border-zinc-700 transition-all cursor-pointer"
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold border border-zinc-700 transition-all cursor-pointer"
                 >
                   Bulk Import Links
                 </button>
@@ -830,6 +872,9 @@ export default function Home() {
         resources={resources}
         onImport={handleBulkImportFile}
       />
+
+      {/* Action Feedback Toast Notifications */}
+      <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </div>
   );
 }
