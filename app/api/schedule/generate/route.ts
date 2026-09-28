@@ -226,6 +226,7 @@ async function callLLMScheduleGenerator({
   feedbackNotes,
 }: HeuristicParams): Promise<{ blocks: ScheduleBlock[]; summary: string } | null> {
   const geminiKey = process.env.GEMINI_API_KEY;
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
   const openaiKey = process.env.OPENAI_API_KEY;
 
   const prompt = `
@@ -344,7 +345,37 @@ Return valid JSON with this exact schema:
     }
   }
 
-  // 2. Try OpenAI
+  // 2. Try Anthropic Claude
+  if (anthropicKey) {
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': anthropicKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-3-5-sonnet-20241022',
+          max_tokens: 3000,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const rawContent = json.content?.[0]?.text || '';
+        const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed.blocks && Array.isArray(parsed.blocks)) return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('Anthropic schedule generation failed:', e);
+    }
+  }
+
+  // 3. Try OpenAI
   if (openaiKey) {
     try {
       const res = await fetch('https://api.openai.com/v1/chat/completions', {

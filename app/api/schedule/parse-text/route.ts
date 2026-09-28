@@ -105,9 +105,11 @@ function heuristicParse(text: string): { candidates: LLMParsedItem[]; preference
   return { candidates, preferences };
 }
 
-async function callLLMParse(text: string): Promise<{ candidates: LLMParsedItem[]; preferences: any }> {
+async function callLLMParse(text: string): Promise<{ candidates: LLMParsedItem[]; preferences: any; method: 'llm' | 'heuristic'; hasAiKey: boolean }> {
   const geminiKey = process.env.GEMINI_API_KEY;
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
   const openaiKey = process.env.OPENAI_API_KEY;
+  const hasAiKey = Boolean(geminiKey || anthropicKey || openaiKey);
 
   const prompt = `
 You are an intelligent scheduling parser for student & professional timetables.
@@ -133,6 +135,7 @@ Also extract "preferences" if mentioned (wakeTime, sleepTime, peakEnergy).
 Return ONLY valid JSON with keys "candidates" (array of items) and "preferences" (object). No markdown ticks or explanation.
 `;
 
+  // 1. Try Gemini
   if (geminiKey) {
     try {
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
@@ -149,8 +152,8 @@ Return ONLY valid JSON with keys "candidates" (array of items) and "preferences"
         const rawContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (rawContent) {
           const parsed = JSON.parse(rawContent.replace(/```json/g, '').replace(/```/g, '').trim());
-          if (Array.isArray(parsed.candidates)) {
-            return parsed;
+          if (Array.isArray(parsed.candidates) && parsed.candidates.length > 0) {
+            return { ...parsed, method: 'llm', hasAiKey: true };
           }
         }
       }
@@ -159,6 +162,39 @@ Return ONLY valid JSON with keys "candidates" (array of items) and "preferences"
     }
   }
 
+  // 2. Try Anthropic
+  if (anthropicKey) {
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': anthropicKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-3-5-sonnet-20241022',
+          max_tokens: 2000,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const rawContent = json.content?.[0]?.text || '';
+        const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (Array.isArray(parsed.candidates) && parsed.candidates.length > 0) {
+            return { ...parsed, method: 'llm', hasAiKey: true };
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Anthropic NLP parsing failed:', e);
+    }
+  }
+
+  // 3. Try OpenAI
   if (openaiKey) {
     try {
       const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -178,7 +214,9 @@ Return ONLY valid JSON with keys "candidates" (array of items) and "preferences"
         const content = data.choices?.[0]?.message?.content;
         if (content) {
           const parsed = JSON.parse(content);
-          if (Array.isArray(parsed.candidates)) return parsed;
+          if (Array.isArray(parsed.candidates) && parsed.candidates.length > 0) {
+            return { ...parsed, method: 'llm', hasAiKey: true };
+          }
         }
       }
     } catch (e) {
@@ -186,7 +224,8 @@ Return ONLY valid JSON with keys "candidates" (array of items) and "preferences"
     }
   }
 
-  return heuristicParse(text);
+  const heuristic = heuristicParse(text);
+  return { ...heuristic, method: 'heuristic', hasAiKey };
 }
 
 export async function POST(req: Request) {
@@ -272,9 +311,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'rawText is required' }, { status: 400 });
     }
 
-    const { candidates, preferences } = await callLLMParse(rawText.trim());
+    const { candidates, preferences, method, hasAiKey } = await callLLMParse(rawText.trim());
 
-    const formattedCandidates: ParsedCandidateItem[] = (candidates || []).map((c, index) => ({
+    if (!candidates || candidates.length === 0) {
+      const helpfulMsg = hasAiKey
+        ? 'Could not identify specific commitments from this text. Try specifying a day and time (e.g. "Gym every MWF 6am").'
+        : 'No commitments matched rule-based patterns. To parse free-form text without strict formatting, add GEMINI_API_KEY or OPENAI_API_KEY in server environment. Otherwise, specify days and times (e.g. "Gym every MWF 6am" or "Meeting Thursdays 5pm").';
+      return NextResponse.json(
+        {
+          error: helpfulMsg,
+          candidates: [],
+          method,
+          hasAiKey,
+        },
+        { status: 422 }
+      );
+    }
+
+    const formattedCandidates: ParsedCandidateItem[] = candidates.map((c, index) => ({
       id: `candidate_${Date.now()}_${index}`,
       title: c.title || 'Commitment',
       dayOfWeek: (c.dayOfWeek !== undefined && c.dayOfWeek >= 0 && c.dayOfWeek <= 6 ? c.dayOfWeek : 1) as DayOfWeek,
@@ -289,6 +343,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
+      method,
+      hasAiKey,
       candidates: formattedCandidates,
       preferences: preferences || {},
       rawText: rawText.trim(),
