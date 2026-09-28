@@ -86,7 +86,23 @@ export interface ArticleClick {
   clickedAt: string;
 }
 
-export type AppTab = 'vault' | 'news' | 'schedule';
+export type AppTab = 'vault' | 'news' | 'schedule' | 'scripts';
+
+export type ScriptStatus = 'needs_corrections' | 'ready_to_shoot' | 'shot' | 'posted';
+
+export interface ScriptItem {
+  id: string;
+  userId?: string;
+  title: string;
+  body: string;
+  status: ScriptStatus;
+  correctionsNote?: string | null;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  shotAt?: string | null;
+  postedAt?: string | null;
+}
 
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0 = Sunday, 1 = Monday...
 

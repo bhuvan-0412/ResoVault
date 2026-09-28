@@ -13,6 +13,7 @@ import { StatsBar } from '@/components/StatsBar';
 import { AuthModal } from '@/components/AuthModal';
 import { NewsDigestTab } from '@/components/NewsDigestTab';
 import { ScheduleTab } from '@/components/ScheduleTab';
+import { ScriptsTab } from '@/components/ScriptsTab';
 import { ToastContainer, ToastItem } from '@/components/Toast';
 import { ResourceSkeleton } from '@/components/ResourceSkeleton';
 import { ShortcutsModal } from '@/components/ShortcutsModal';
@@ -975,6 +976,16 @@ export default function Home() {
               setAuthModalMode('login');
               setIsAuthModalOpen(true);
             }}
+          />
+        ) : activeTab === 'scripts' ? (
+          <ScriptsTab
+            isAuthenticated={Boolean(user)}
+            onRequireAuth={() => {
+              setAuthModalMode('login');
+              setIsAuthModalOpen(true);
+            }}
+            searchQuery={searchQuery}
+            showToast={showToast}
           />
         ) : (
           <>

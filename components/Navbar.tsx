@@ -22,6 +22,7 @@ import {
   CalendarClock,
   HelpCircle,
   CheckSquare,
+  Clapperboard,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -168,6 +169,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                 AI
               </span>
             </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('scripts')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === 'scripts'
+                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/20'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+              }`}
+            >
+              <Clapperboard className={`w-3.5 h-3.5 ${activeTab === 'scripts' ? 'text-emerald-300' : 'text-emerald-400'}`} />
+              <span>Scripts</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                Shoot
+              </span>
+            </button>
           </div>
 
           {/* Search Bar */}
@@ -186,7 +202,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                     ? "Search resources by title, category, tags, or notes... (Press '/' to focus)"
                     : activeTab === 'news'
                     ? "Search articles or switch to Vault... (Press '/' to focus)"
-                    : "Search schedule, todos, or switch to Vault... (Press '/' to focus)"
+                    : activeTab === 'schedule'
+                    ? "Search schedule, todos, or switch to Vault... (Press '/' to focus)"
+                    : "Search video scripts by title, body, notes, tags... (Press '/' to focus)"
                 }
                 className="w-full pl-10 pr-10 py-2 text-sm bg-zinc-900/90 hover:bg-zinc-900 text-zinc-100 placeholder-zinc-500 rounded-xl border border-zinc-800 focus:outline-none focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 transition-all shadow-inner"
               />
@@ -552,6 +570,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <CalendarClock className="w-3.5 h-3.5 text-violet-400" />
               <span>Schedule</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('scripts')}
+              className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg transition-all cursor-pointer ${
+                activeTab === 'scripts'
+                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-sm'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Clapperboard className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Scripts</span>
             </button>
           </div>
 
