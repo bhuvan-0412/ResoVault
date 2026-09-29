@@ -13,6 +13,7 @@ import {
   Clapperboard,
   Sparkles,
   Share2,
+  Maximize2,
 } from 'lucide-react';
 import { ScriptItem, ScriptStatus } from '@/lib/types';
 import {
@@ -27,6 +28,7 @@ interface ScriptCardProps {
   onDelete: (id: string) => void;
   onStatusChange: (id: string, newStatus: ScriptStatus) => void;
   onAdvanceStatus?: (id: string, currentStatus: ScriptStatus) => void;
+  onReadFullScreen?: (script: ScriptItem) => void;
 }
 
 export const ScriptCard: React.FC<ScriptCardProps> = ({
@@ -35,6 +37,7 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({
   onDelete,
   onStatusChange,
   onAdvanceStatus,
+  onReadFullScreen,
 }) => {
   const { words, speakingTime } = formatScriptMetrics(script.body);
   const statusConfig = SCRIPT_STATUS_CONFIG[script.status];
@@ -115,8 +118,19 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({
             <span>{words} words · {speakingTime}</span>
           </span>
 
-          {/* Quick Actions (Edit, Delete) */}
+          {/* Quick Actions (Read Full Screen, Edit, Delete) */}
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            {onReadFullScreen && (
+              <button
+                type="button"
+                onClick={() => onReadFullScreen(script)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                title="Read Full Screen (Fit to Screen)"
+                aria-label="Read Full Screen"
+              >
+                <Maximize2 className="w-3.5 h-3.5" />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => onEdit(script)}

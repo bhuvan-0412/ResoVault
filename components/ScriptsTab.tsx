@@ -18,6 +18,7 @@ import {
   FileText,
   Video,
   Flame,
+  Maximize2,
 } from 'lucide-react';
 import { ScriptItem, ScriptStatus } from '@/lib/types';
 import {
@@ -37,6 +38,7 @@ import { ScriptCard } from './ScriptCard';
 import { AddEditScriptModal } from './AddEditScriptModal';
 import { BulkImportScriptsModal } from './BulkImportScriptsModal';
 import { ShootDayModal } from './ShootDayModal';
+import { FitToScreenModal } from './FitToScreenModal';
 
 interface ScriptsTabProps {
   isAuthenticated: boolean;
@@ -68,6 +70,7 @@ export const ScriptsTab: React.FC<ScriptsTabProps> = ({
   const [editingScript, setEditingScript] = useState<ScriptItem | null>(null);
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [isShootDayOpen, setIsShootDayOpen] = useState(false);
+  const [fitToScreenScript, setFitToScreenScript] = useState<ScriptItem | null>(null);
 
   // Undo deletions tracking ref: id -> timeout
   const pendingDeletionsRef = useRef<Map<string, { timer: NodeJS.Timeout; script: ScriptItem }>>(new Map());
@@ -471,6 +474,7 @@ export const ScriptsTab: React.FC<ScriptsTabProps> = ({
                             onDelete={handleDeleteScript}
                             onStatusChange={handleStatusChange}
                             onAdvanceStatus={handleAdvanceStatus}
+                            onReadFullScreen={(s) => setFitToScreenScript(s)}
                           />
                         ))
                       )}
@@ -566,6 +570,17 @@ export const ScriptsTab: React.FC<ScriptsTabProps> = ({
                           </span>
 
                           <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setFitToScreenScript(script)}
+                              className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-zinc-950 hover:bg-zinc-800 text-zinc-300 hover:text-emerald-400 border border-zinc-800 transition-colors cursor-pointer"
+                              title="Read Full Screen (Fit to Screen)"
+                              aria-label="Read Full Screen"
+                            >
+                              <Maximize2 className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Read</span>
+                            </button>
+
                             <select
                               value={script.status}
                               onChange={(e) =>
@@ -635,6 +650,20 @@ export const ScriptsTab: React.FC<ScriptsTabProps> = ({
         onMarkAsShot={async (scriptId) => {
           await handleStatusChange(scriptId, 'shot');
         }}
+      />
+
+      {/* Fit-to-Screen Reader Modal */}
+      <FitToScreenModal
+        isOpen={Boolean(fitToScreenScript)}
+        onClose={() => setFitToScreenScript(null)}
+        script={fitToScreenScript}
+        onMarkAsShot={async (scriptId) => {
+          await handleStatusChange(scriptId, 'shot');
+          setFitToScreenScript((prev) =>
+            prev && prev.id === scriptId ? { ...prev, status: 'shot' } : prev
+          );
+        }}
+        showToast={showToast}
       />
     </div>
   );
