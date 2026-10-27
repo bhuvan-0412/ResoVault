@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { normalizeUrl, getDomain } from '@/lib/utils';
+import { isGenericTitle } from '@/lib/link-taxonomy';
 
 // Helper to decode HTML entities
 function decodeHtmlEntities(str: string): string {
@@ -79,8 +80,8 @@ async function fetchOpenGraphMetadata(url: string): Promise<{ title: string; des
       html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ||
       html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
 
-    let title = ogTitleMatch?.[1] || titleTagMatch?.[1] || '';
-    let description = ogDescMatch?.[1] || '';
+    const title = ogTitleMatch?.[1] || titleTagMatch?.[1] || '';
+    const description = ogDescMatch?.[1] || '';
     const thumbnail = ogImageMatch?.[1] || undefined;
 
     return {
@@ -111,7 +112,7 @@ export async function GET(req: Request) {
     // 1. YouTube oEmbed
     if (lower.includes('youtube.com') || lower.includes('youtu.be')) {
       const ytData = await fetchYouTubeOEmbed(normalized);
-      if (ytData && ytData.title && !isGenericOrUnhelpful(ytData.title, normalized)) {
+      if (ytData && ytData.title && !isGenericTitle(ytData.title)) {
         return NextResponse.json({
           success: true,
           data: {
@@ -129,11 +130,11 @@ export async function GET(req: Request) {
     const ogData = await fetchOpenGraphMetadata(normalized);
 
     let title = ogData.title;
-    if (title && !isGenericOrUnhelpful(title, normalized)) {
+    if (title && !isGenericTitle(title)) {
       isSpecific = true;
     } else {
       isSpecific = false;
-      if (!title || isGenericOrUnhelpful(title, normalized)) {
+      if (!title || isGenericTitle(title)) {
         const cleanDomain = domain.split('.')[0];
         title = cleanDomain.charAt(0).toUpperCase() + cleanDomain.slice(1);
       }
@@ -153,53 +154,4 @@ export async function GET(req: Request) {
     console.error('Error in GET /api/metadata:', error);
     return NextResponse.json({ error: 'Failed to fetch metadata' }, { status: 500 });
   }
-}
-
-export function isGenericOrUnhelpful(title: string, url: string = ''): boolean {
-  if (!title || typeof title !== 'string') return true;
-  const clean = title.trim().toLowerCase();
-  if (clean.length < 3) return true;
-
-  const genericPatterns = [
-    /^google drive$/,
-    /^drive$/,
-    /^google docs$/,
-    /^google sheets$/,
-    /^google slides$/,
-    /^google forms$/,
-    /^google$/,
-    /^google accounts$/,
-    /^sign in.*$/,
-    /^login.*$/,
-    /^log in.*$/,
-    /^sign up.*$/,
-    /^dropbox$/,
-    /^onedrive$/,
-    /^notion$/,
-    /^instagram$/,
-    /^twitter$/,
-    /^x$/,
-    /^github$/,
-    /^youtube$/,
-    /^404.*$/,
-    /^page not found.*$/,
-    /^error.*$/,
-    /^internal server error.*$/,
-    /^access denied.*$/,
-    /^unauthorized.*$/,
-    /^forbidden.*$/,
-    /^security check.*$/,
-    /^just a moment\.\.\..*$/,
-    /^attention required.*$/,
-    /^redirecting.*$/,
-    /.*— review$/,
-    /^untitled.*$/,
-    /^home$/,
-    /^welcome$/
-  ];
-
-  for (const pat of genericPatterns) {
-    if (pat.test(clean)) return true;
-  }
-  return false;
 }

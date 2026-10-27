@@ -49,3 +49,7 @@ next-env.d.ts
 # local data exports
 links-export.csv
 categories-export.csv
+
+# local backups
+backups/
+links-cleanup.json

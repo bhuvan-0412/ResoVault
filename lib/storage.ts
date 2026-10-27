@@ -1,15 +1,26 @@
 import { createClient, isSupabaseConfigured } from './supabase/client';
 import { Resource, CategoryStat, UrlMetadata } from './types';
+import { FOLDER_NAMES } from './link-taxonomy';
 
+// The 11 standard folders (see lib/link-taxonomy.ts)
+export const DEFAULT_STARTING_CATEGORIES: string[] = [...FOLDER_NAMES];
 
-export const DEFAULT_STARTING_CATEGORIES = [
-  'Video Editing',
-  'Development',
-  'Content Creation',
-  'Product Management',
-];
+interface SupabaseResourceRow {
+  id: string;
+  user_id?: string;
+  url: string;
+  title: string;
+  category?: string | null;
+  tags?: string[] | null;
+  description?: string | null;
+  is_pinned?: boolean | null;
+  click_count?: number | null;
+  last_opened_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
-function mapSupabaseRow(row: any): Resource {
+function mapSupabaseRow(row: SupabaseResourceRow): Resource {
   return {
     id: row.id,
     userId: row.user_id,
@@ -339,7 +350,7 @@ export async function bulkModifyTag(
   return true;
 }
 
-// Fetch user categories from Supabase with counts
+// Fetch user categories from Supabase with counts, in the user's saved folder order
 export async function fetchCategories(): Promise<CategoryStat[]> {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -348,45 +359,54 @@ export async function fetchCategories(): Promise<CategoryStat[]> {
     return DEFAULT_STARTING_CATEGORIES.map((name) => ({ name, count: 0 }));
   }
 
-  // 1. Fetch user categories
-  const { data: catRows, error: catError } = await supabase
+  // 1. Fetch user categories ordered by position (nulls last). Falls back to name order
+  //    when the position column has not been migrated yet.
+  let catNames: string[] | null = null;
+  const ordered = await supabase
     .from('categories')
     .select('name')
+    .order('position', { ascending: true, nullsFirst: false })
     .order('name');
+  if (!ordered.error) {
+    catNames = (ordered.data || []).map((r) => r.name as string);
+  } else {
+    const plain = await supabase.from('categories').select('name').order('name');
+    if (plain.error) {
+      console.error('Supabase fetchCategories error:', plain.error);
+    } else {
+      catNames = (plain.data || []).map((r) => r.name as string);
+    }
+  }
 
-  // If no categories exist yet in DB, seed the 4 default categories
-  if (!catRows || catRows.length === 0) {
+  // Brand-new account with no folders: seed the 11 standard ones
+  if (catNames && catNames.length === 0) {
     for (const catName of DEFAULT_STARTING_CATEGORIES) {
       await ensureCategoryExists(catName);
     }
+    catNames = [...DEFAULT_STARTING_CATEGORIES];
   }
 
   // 2. Fetch resources to calculate counts
-  const { data: resourceRows } = await supabase.from('resources').select('category');
+  const { data: resourceRows, error: resError } = await supabase.from('resources').select('category');
+  if (resError) {
+    console.error('Supabase fetchCategories counts error:', resError);
+  }
 
   const counts: Record<string, number> = {};
-  for (const c of DEFAULT_STARTING_CATEGORIES) {
-    counts[c] = 0;
+  for (const name of catNames || []) {
+    counts[name] = 0;
   }
 
-  if (catRows) {
-    for (const row of catRows) {
-      if (!(row.name in counts)) {
-        counts[row.name] = 0;
-      }
-    }
+  const extras = new Set<string>();
+  for (const r of resourceRows || []) {
+    const cat = r.category || 'Uncategorized';
+    if (!(cat in counts)) extras.add(cat);
+    counts[cat] = (counts[cat] || 0) + 1;
   }
 
-  if (resourceRows) {
-    for (const r of resourceRows) {
-      const cat = r.category || 'Uncategorized';
-      counts[cat] = (counts[cat] || 0) + 1;
-    }
-  }
-
-  return Object.keys(counts)
-    .sort((a, b) => a.localeCompare(b))
-    .map((name) => ({ name, count: counts[name] }));
+  // Saved order first, then folders that only exist on links (alphabetical)
+  const names = [...(catNames || []), ...Array.from(extras).sort((a, b) => a.localeCompare(b))];
+  return names.map((name) => ({ name, count: counts[name] || 0 }));
 }
 
 // Create custom category in Supabase
@@ -410,3 +430,151 @@ export async function fetchUrlMetadata(url: string): Promise<UrlMetadata | null>
 }
 
 
+
+
+// ---------------------------------------------------------------------------
+// Folder management (rename / merge / delete / reorder)
+// supabase-js does not throw: every call below inspects its { error } return.
+// ---------------------------------------------------------------------------
+
+export type StorageResult = { ok: true } | { ok: false; error: string };
+
+const MIGRATION_HINT = 'Run supabase/migrations/20261027_categories_manage.sql in the Supabase SQL Editor.';
+
+async function getUserId(): Promise<string | null> {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  return user?.id ?? null;
+}
+
+function failure(prefix: string, message: string): StorageResult {
+  return { ok: false, error: `${prefix}: ${message}` };
+}
+
+// Rename a folder: updates the category row AND every link filed under the old name
+export async function renameCategory(oldName: string, newName: string): Promise<StorageResult> {
+  const clean = newName.trim();
+  if (!clean) return { ok: false, error: 'Folder name cannot be empty.' };
+  if (clean === oldName) return { ok: true };
+
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: 'You must be signed in.' };
+  const supabase = createClient();
+
+  // 1. Category row (a folder may exist only on links, with no row)
+  const { data: existing, error: lookupError } = await supabase
+    .from('categories')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('name', oldName);
+  if (lookupError) return failure('Could not read folder', lookupError.message);
+  const hadRow = (existing || []).length > 0;
+
+  if (hadRow) {
+    const { data: updated, error } = await supabase
+      .from('categories')
+      .update({ name: clean })
+      .eq('user_id', userId)
+      .eq('name', oldName)
+      .select('id');
+    if (error) {
+      return failure('Could not rename folder', error.code === '23505' ? `"${clean}" already exists` : error.message);
+    }
+    if (!updated || updated.length === 0) {
+      return { ok: false, error: `Rename was blocked (missing UPDATE policy). ${MIGRATION_HINT}` };
+    }
+  } else {
+    const { error } = await supabase.from('categories').insert({ user_id: userId, name: clean });
+    if (error && error.code !== '23505') return failure('Could not create folder', error.message);
+  }
+
+  // 2. Links
+  const { error: linkError } = await supabase
+    .from('resources')
+    .update({ category: clean, updated_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .eq('category', oldName);
+  if (linkError) {
+    // Roll the folder name back so links and folder stay in sync
+    if (hadRow) {
+      const { error: rollbackError } = await supabase
+        .from('categories')
+        .update({ name: oldName })
+        .eq('user_id', userId)
+        .eq('name', clean);
+      if (rollbackError) console.error('Rename rollback failed:', rollbackError);
+    }
+    return failure('Could not move links to the new name', linkError.message);
+  }
+
+  return { ok: true };
+}
+
+// Move every link from one folder to another, then remove the source folder
+export async function mergeCategory(fromName: string, toName: string): Promise<StorageResult> {
+  if (fromName === toName) return { ok: false, error: 'Pick a different destination folder.' };
+
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: 'You must be signed in.' };
+  const supabase = createClient();
+
+  // Destination must exist as a folder row
+  const { error: ensureError } = await supabase.from('categories').insert({ user_id: userId, name: toName });
+  if (ensureError && ensureError.code !== '23505') return failure('Could not prepare destination', ensureError.message);
+
+  const { error: moveError } = await supabase
+    .from('resources')
+    .update({ category: toName, updated_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .eq('category', fromName);
+  if (moveError) return failure('Could not move links (nothing was deleted)', moveError.message);
+
+  const { error: deleteError } = await supabase
+    .from('categories')
+    .delete()
+    .eq('user_id', userId)
+    .eq('name', fromName);
+  if (deleteError) return failure('Links moved, but the old folder could not be deleted', deleteError.message);
+
+  return { ok: true };
+}
+
+// Delete a folder. A folder that still has links needs a destination; links are never silently deleted.
+export async function deleteCategory(name: string, moveTo?: string): Promise<StorageResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: 'You must be signed in.' };
+  const supabase = createClient();
+
+  const { count, error: countError } = await supabase
+    .from('resources')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('category', name);
+  if (countError) return failure('Could not check folder contents', countError.message);
+
+  if ((count ?? 0) > 0) {
+    if (!moveTo) {
+      return { ok: false, error: `"${name}" still has ${count} link${count === 1 ? '' : 's'}. Choose where to move them.` };
+    }
+    return mergeCategory(name, moveTo);
+  }
+
+  const { error } = await supabase.from('categories').delete().eq('user_id', userId).eq('name', name);
+  if (error) return failure('Could not delete folder', error.message);
+  return { ok: true };
+}
+
+// Persist the folder order (position = index * 1000). Creates rows for folders that only exist on links.
+export async function reorderCategories(orderedNames: string[]): Promise<StorageResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: 'You must be signed in.' };
+  const supabase = createClient();
+
+  const rows = orderedNames.map((name, i) => ({ user_id: userId, name, position: (i + 1) * 1000 }));
+  const { error } = await supabase.from('categories').upsert(rows, { onConflict: 'user_id,name' });
+  if (error) {
+    const missing = error.code === '42703' || error.code === '42501' || /position|policy/i.test(error.message);
+    return failure('Could not save folder order', missing ? `${error.message}. ${MIGRATION_HINT}` : error.message);
+  }
+  return { ok: true };
+}

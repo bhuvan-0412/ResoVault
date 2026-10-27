@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Navbar } from '@/components/Navbar';
 import { CategoryOverview } from '@/components/CategoryOverview';
+import { ManageFoldersModal, FolderChange } from '@/components/ManageFoldersModal';
 import { ResourceCard } from '@/components/ResourceCard';
 import { ResourceListRow } from '@/components/ResourceListRow';
 import { AddEditModal } from '@/components/AddEditModal';
@@ -75,6 +76,7 @@ export default function Home() {
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
+  const [isManageFoldersOpen, setIsManageFoldersOpen] = useState(false);
 
   // Bulk selection state
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -212,37 +214,31 @@ export default function Home() {
   const categoriesStat: CategoryStat[] = useMemo(() => {
     const counts: Record<string, number> = {};
 
-    // Initialize with default starting categories
-    for (const cat of DEFAULT_STARTING_CATEGORIES) {
-      counts[cat] = 0;
+    // Saved folder order first (a deleted folder must not reappear)
+    const names: string[] = userCategories.map((c) => c.name);
+    for (const name of names) {
+      counts[name] = 0;
     }
 
-    // Add any user categories fetched from Supabase
-    for (const cat of userCategories) {
-      if (!(cat.name in counts)) {
-        counts[cat.name] = 0;
-      }
-    }
-
-    // Count actual resources
+    // Count actual resources; folders that only exist on links go last, alphabetically
+    const extras = new Set<string>();
     resources.forEach((r) => {
       const cat = r.category || 'Uncategorized';
+      if (!(cat in counts)) extras.add(cat);
       counts[cat] = (counts[cat] || 0) + 1;
     });
+    names.push(...Array.from(extras).sort((a, b) => a.localeCompare(b)));
 
-    return Object.keys(counts)
-      .sort((a, b) => a.localeCompare(b))
-      .map((name) => ({ name, count: counts[name] }));
+    return names.map((name) => ({ name, count: counts[name] }));
   }, [resources, userCategories]);
 
   // Unique category names list for dropdowns
   const existingCategories = useMemo(() => {
-    const set = new Set<string>(DEFAULT_STARTING_CATEGORIES);
-    userCategories.forEach((c) => set.add(c.name));
+    const set = new Set<string>(userCategories.map((c) => c.name));
     resources.forEach((r) => {
       if (r.category) set.add(r.category);
     });
-    return Array.from(set).sort();
+    return Array.from(set);
   }, [resources, userCategories]);
 
   // Unique tags list
@@ -395,6 +391,26 @@ export default function Home() {
 
     return [...pinned, ...unpinned];
   }, [resources, activeCategory, selectedTags, tagFilterMode, searchQuery, sortOption]);
+
+  // Reload links + folders after a folder rename / merge / delete / reorder (no skeleton flash)
+  const handleFoldersChanged = useCallback(
+    async (change?: FolderChange) => {
+      if (change?.renamedFrom && change.renamedTo) {
+        setActiveCategory((prev) => (prev === change.renamedFrom ? change.renamedTo ?? null : prev));
+      }
+      if (change?.removed) {
+        setActiveCategory((prev) => (prev === change.removed ? null : prev));
+      }
+      try {
+        const [resourcesData, categoriesData] = await Promise.all([fetchResources(), fetchCategories()]);
+        setResources(resourcesData);
+        setUserCategories(categoriesData);
+      } catch (err) {
+        showToast('Could not refresh folders', 'error', err instanceof Error ? err.message : undefined);
+      }
+    },
+    [showToast]
+  );
 
   // Resource CRUD Handlers with Supabase
   const handleSaveResource = async (
@@ -662,6 +678,7 @@ export default function Home() {
       const hasAnyModalOpen =
         isAddModalOpen ||
         isBulkModalOpen ||
+        isManageFoldersOpen ||
         isBackupModalOpen ||
         Boolean(deletingId) ||
         isAuthModalOpen ||
@@ -787,6 +804,7 @@ export default function Home() {
     isShortcutsModalOpen,
     isAddModalOpen,
     isBulkModalOpen,
+    isManageFoldersOpen,
     isBackupModalOpen,
     deletingId,
     isAuthModalOpen,
@@ -1058,6 +1076,7 @@ export default function Home() {
             activeCategory={activeCategory}
             onSelectCategory={setActiveCategory}
             totalCount={resources.length}
+            onManageFolders={() => setIsManageFoldersOpen(true)}
           />
         )}
 
@@ -1281,6 +1300,15 @@ export default function Home() {
         existingCategories={existingCategories}
         existingTags={existingTags}
         editingResource={editingResource}
+      />
+
+      {/* Manage Folders Modal */}
+      <ManageFoldersModal
+        isOpen={isManageFoldersOpen}
+        onClose={() => setIsManageFoldersOpen(false)}
+        categories={categoriesStat}
+        onChanged={handleFoldersChanged}
+        showToast={showToast}
       />
 
       {/* Bulk Import Modal */}

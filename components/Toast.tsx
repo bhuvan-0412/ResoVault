@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { CheckCircle2, Trash2, Pin, Copy, Sparkles, X, Info } from 'lucide-react';
+import { CheckCircle2, Trash2, Pin, Copy, Sparkles, X, Info, AlertTriangle } from 'lucide-react';
 
-export type ToastType = 'success' | 'delete' | 'pin' | 'copy' | 'info';
+export type ToastType = 'success' | 'delete' | 'pin' | 'copy' | 'info' | 'error';
 
 export interface ToastItem {
   id: string;
@@ -37,7 +37,7 @@ const ToastMessage: React.FC<{ toast: ToastItem; onDismiss: (id: string) => void
   onDismiss,
 }) => {
   useEffect(() => {
-    const duration = toast.durationMs || (toast.undoAction ? 5000 : 2800);
+    const duration = toast.durationMs || (toast.undoAction ? 5000 : toast.type === 'error' ? 6000 : 2800);
     const timer = setTimeout(() => {
       onDismiss(toast.id);
     }, duration);
@@ -54,6 +54,8 @@ const ToastMessage: React.FC<{ toast: ToastItem; onDismiss: (id: string) => void
         return <Pin className="w-4 h-4 text-amber-400 fill-amber-400 rotate-45 shrink-0" />;
       case 'copy':
         return <Copy className="w-4 h-4 text-indigo-400 shrink-0" />;
+      case 'error':
+        return <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />;
       case 'info':
       default:
         return <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />;
@@ -65,6 +67,7 @@ const ToastMessage: React.FC<{ toast: ToastItem; onDismiss: (id: string) => void
       case 'success':
         return 'border-emerald-500/30 bg-zinc-950/95';
       case 'delete':
+      case 'error':
         return 'border-rose-500/30 bg-zinc-950/95';
       case 'pin':
         return 'border-amber-500/30 bg-zinc-950/95';
@@ -85,7 +88,9 @@ const ToastMessage: React.FC<{ toast: ToastItem; onDismiss: (id: string) => void
         </div>
         <div className="min-w-0">
           <p className="text-xs font-semibold text-zinc-100 truncate">{toast.message}</p>
-          {toast.subtext && <p className="text-[11px] text-zinc-400 truncate">{toast.subtext}</p>}
+          {toast.subtext && (
+            <p className={`text-[11px] text-zinc-400 ${toast.type === 'error' ? 'break-words line-clamp-3' : 'truncate'}`}>{toast.subtext}</p>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-1.5 shrink-0">

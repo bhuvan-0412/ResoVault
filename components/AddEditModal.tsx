@@ -5,6 +5,14 @@ import { X, Plus, Tag as TagIcon, Folder, Link as LinkIcon, FileText, Check, Ale
 import { Resource } from '@/lib/types';
 import { normalizeUrl, getDomain } from '@/lib/utils';
 import { fetchUrlMetadata } from '@/lib/storage';
+import {
+  FOLDER_NAMES,
+  NEEDS_REVIEW_TAG,
+  TOPIC_TAGS,
+  TYPE_TAGS,
+  isGenericTitle,
+  normalizeTag,
+} from '@/lib/link-taxonomy';
 
 interface AddEditModalProps {
   isOpen: boolean;
@@ -38,6 +46,12 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
   const [targetUpdateId, setTargetUpdateId] = useState<string | null>(null);
   const [forceAllowDuplicate, setForceAllowDuplicate] = useState(false);
 
+  // The 11 taxonomy folders first (in fixed order), then any custom folders
+  const folderOptions = React.useMemo(() => {
+    const extras = existingCategories.filter((c) => !FOLDER_NAMES.includes(c)).sort((a, b) => a.localeCompare(b));
+    return [...FOLDER_NAMES, ...extras];
+  }, [existingCategories]);
+
   // Detect duplicate URL
   const duplicateMatch = React.useMemo(() => {
     if (!url.trim() || forceAllowDuplicate) return null;
@@ -69,14 +83,14 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
       setUrl('');
       setTitle('');
       // Default to first category if available or Uncategorized
-      setCategory(existingCategories.length > 0 ? existingCategories[0] : 'Work & Projects');
+      setCategory(FOLDER_NAMES[0]);
       setIsCreatingNewCategory(false);
       setNewCategoryInput('');
       setTags([]);
       setNotes('');
     }
     setErrors({});
-  }, [editingResource, isOpen, existingCategories]);
+  }, [editingResource, isOpen]);
 
   if (!isOpen) return null;
 
@@ -90,24 +104,28 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
     try {
       const meta = await fetchUrlMetadata(normalized);
       if (meta) {
-        if (meta.title && (!title.trim() || targetUrl)) {
+        const appliedFromMeta = Boolean(meta.title) && (!title.trim() || Boolean(targetUrl));
+        if (appliedFromMeta) {
           setTitle(meta.title);
         }
         if (meta.description && (!notes.trim() || targetUrl)) {
           setNotes(meta.description);
         }
-        // Handle failure / generic title gracefully
-        if (!meta.isSpecificTitle) {
-          setTags((prev) => (prev.includes('needs-review') ? prev : [...prev, 'needs-review']));
-        } else {
-          setTags((prev) => prev.filter((t) => t !== 'needs-review'));
-        }
+        // needs-review only when the resulting title is generic or empty
+        const resultingTitle = appliedFromMeta ? meta.title : title;
+        const needsReview = appliedFromMeta
+          ? !meta.isSpecificTitle || isGenericTitle(resultingTitle)
+          : !resultingTitle.trim() || isGenericTitle(resultingTitle);
+        setTags((prev) => {
+          const without = prev.filter((t) => t !== NEEDS_REVIEW_TAG);
+          return needsReview ? [...without, NEEDS_REVIEW_TAG] : without;
+        });
       } else if (!title.trim()) {
         const domain = getDomain(raw);
         if (domain) {
           const cleanDomain = domain.split('.')[0];
           setTitle(cleanDomain.charAt(0).toUpperCase() + cleanDomain.slice(1));
-          setTags((prev) => (prev.includes('needs-review') ? prev : [...prev, 'needs-review']));
+          setTags((prev) => (prev.includes(NEEDS_REVIEW_TAG) ? prev : [...prev, NEEDS_REVIEW_TAG]));
         }
       }
     } catch {
@@ -116,7 +134,7 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
         if (domain) {
           const cleanDomain = domain.split('.')[0];
           setTitle(cleanDomain.charAt(0).toUpperCase() + cleanDomain.slice(1));
-          setTags((prev) => (prev.includes('needs-review') ? prev : [...prev, 'needs-review']));
+          setTags((prev) => (prev.includes(NEEDS_REVIEW_TAG) ? prev : [...prev, NEEDS_REVIEW_TAG]));
         }
       }
     } finally {
@@ -133,11 +151,24 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
 
   // Add tag chip
   const handleAddTag = (tagToAdd: string) => {
-    const trimmed = tagToAdd.trim().toLowerCase().replace(/^#/, '');
+    const trimmed = normalizeTag(tagToAdd);
     if (trimmed && !tags.includes(trimmed)) {
       setTags([...tags, trimmed]);
     }
     setTagInput('');
+  };
+
+  // Suggestion chips toggle: click adds, click again removes
+  const handleToggleSuggestedTag = (tag: string) => {
+    setTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
+  };
+
+  // Editing the title clears needs-review once the title is no longer generic
+  const handleTitleChange = (value: string) => {
+    setTitle(value);
+    if (value.trim() && !isGenericTitle(value)) {
+      setTags((prev) => (prev.includes(NEEDS_REVIEW_TAG) ? prev.filter((t) => t !== NEEDS_REVIEW_TAG) : prev));
+    }
   };
 
   const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -166,6 +197,12 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
     let finalTitle = title.trim();
     let currentTags = [...tags];
 
+    // A title the user supplied decides needs-review on its own
+    if (finalTitle) {
+      currentTags = currentTags.filter((t) => t !== NEEDS_REVIEW_TAG);
+      if (isGenericTitle(finalTitle)) currentTags.push(NEEDS_REVIEW_TAG);
+    }
+
     // If title is missing, automatically extract it instead of requiring manual entry
     if (!finalTitle) {
       setIsFetchingMeta(true);
@@ -174,9 +211,9 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
         if (meta && meta.title) {
           finalTitle = meta.title.trim();
           if (!meta.isSpecificTitle) {
-            if (!currentTags.includes('needs-review')) currentTags.push('needs-review');
+            if (!currentTags.includes(NEEDS_REVIEW_TAG)) currentTags.push(NEEDS_REVIEW_TAG);
           } else {
-            currentTags = currentTags.filter((t) => t !== 'needs-review');
+            currentTags = currentTags.filter((t) => t !== NEEDS_REVIEW_TAG);
           }
         }
       } catch {
@@ -189,7 +226,7 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
         const domain = getDomain(normalized);
         const cleanDomain = domain.split('.')[0] || 'Resource';
         finalTitle = cleanDomain.charAt(0).toUpperCase() + cleanDomain.slice(1);
-        if (!currentTags.includes('needs-review')) currentTags.push('needs-review');
+        if (!currentTags.includes(NEEDS_REVIEW_TAG)) currentTags.push(NEEDS_REVIEW_TAG);
       }
     }
 
@@ -369,7 +406,7 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
             <input
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => handleTitleChange(e.target.value)}
               placeholder="Leave blank to auto-fetch, or enter custom title"
               className="w-full px-3.5 py-2.5 bg-zinc-950 text-zinc-100 placeholder-zinc-500 text-base sm:text-sm rounded-xl border border-zinc-800 focus:border-indigo-500/80 focus:ring-indigo-500/20 focus:outline-none focus:ring-2 transition-all"
             />
@@ -423,7 +460,7 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
                 }}
                 className="w-full px-3.5 py-2.5 bg-zinc-950 text-zinc-100 text-base sm:text-sm rounded-xl border border-zinc-800 focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition-all cursor-pointer"
               >
-                {existingCategories.map((cat) => (
+                {folderOptions.map((cat) => (
                   <option key={cat} value={cat}>
                     {cat}
                   </option>
@@ -464,30 +501,64 @@ export const AddEditModal: React.FC<AddEditModalProps> = ({
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={handleTagKeyDown}
-                placeholder="Type tag and press Enter (e.g. react, docs, finance)"
+                placeholder="Type a tag and press Enter, or tap a suggestion below"
                 className="w-full px-3.5 py-2.5 bg-zinc-950 text-zinc-100 placeholder-zinc-500 text-base sm:text-sm rounded-xl border border-zinc-800 focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition-all"
               />
             </div>
 
-            {/* Quick suggested existing tags */}
-            {existingTags.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                <span className="text-[11px] text-zinc-500 self-center mr-1">Suggestions:</span>
-                {existingTags
-                  .filter((t) => !tags.includes(t))
-                  .slice(0, 5)
-                  .map((tag) => (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => handleAddTag(tag)}
-                      className="text-[11px] text-zinc-400 hover:text-indigo-300 bg-zinc-950/80 hover:bg-zinc-800 px-2 py-0.5 rounded-md border border-zinc-800 transition-colors cursor-pointer"
-                    >
-                      +{tag}
-                    </button>
-                  ))}
+            {/* Taxonomy suggestions: 1 type tag + 1-3 topic tags */}
+            <div className="mt-2.5 space-y-2 max-h-40 overflow-y-auto rounded-xl border border-zinc-800/70 bg-zinc-950/60 p-2.5">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 mb-1.5">
+                  Type <span className="normal-case font-normal">(pick 1)</span>
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {TYPE_TAGS.map((tag) => {
+                    const on = tags.includes(tag);
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => handleToggleSuggestedTag(tag)}
+                        aria-pressed={on}
+                        className={`text-[11px] px-2 py-1 rounded-md border transition-colors cursor-pointer ${
+                          on
+                            ? 'bg-indigo-500/20 text-indigo-200 border-indigo-500/50'
+                            : 'text-zinc-400 hover:text-indigo-300 bg-zinc-950/80 hover:bg-zinc-800 border-zinc-800'
+                        }`}
+                      >
+                        {on ? '' : '+'}{tag}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            )}
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 mb-1.5">
+                  Topic <span className="normal-case font-normal">(pick 1-3)</span>
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {TOPIC_TAGS.map((tag) => {
+                    const on = tags.includes(tag);
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => handleToggleSuggestedTag(tag)}
+                        aria-pressed={on}
+                        className={`text-[11px] px-2 py-1 rounded-md border transition-colors cursor-pointer ${
+                          on
+                            ? 'bg-emerald-500/20 text-emerald-200 border-emerald-500/50'
+                            : 'text-zinc-400 hover:text-emerald-300 bg-zinc-950/80 hover:bg-zinc-800 border-zinc-800'
+                        }`}
+                      >
+                        {on ? '' : '+'}{tag}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Notes Field (Optional) */}

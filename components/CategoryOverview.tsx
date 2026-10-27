@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Folder, FolderOpen, Layers } from 'lucide-react';
+import { Folder, FolderOpen, Layers, FolderCog } from 'lucide-react';
 import { CategoryStat } from '@/lib/types';
 import { getCategoryStyle } from '@/lib/utils';
 
@@ -10,6 +10,7 @@ interface CategoryOverviewProps {
   activeCategory: string | null;
   onSelectCategory: (category: string | null) => void;
   totalCount: number;
+  onManageFolders?: () => void;
 }
 
 export const CategoryOverview: React.FC<CategoryOverviewProps> = ({
@@ -17,6 +18,7 @@ export const CategoryOverview: React.FC<CategoryOverviewProps> = ({
   activeCategory,
   onSelectCategory,
   totalCount,
+  onManageFolders,
 }) => {
   return (
     <div className="mb-6">
@@ -25,14 +27,26 @@ export const CategoryOverview: React.FC<CategoryOverviewProps> = ({
           <Layers className="w-3.5 h-3.5 text-indigo-400" />
           Categories &amp; Folders
         </h2>
-        {activeCategory && (
-          <button
-            onClick={() => onSelectCategory(null)}
-            className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors font-medium cursor-pointer"
-          >
-            Clear Filter (Show All)
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {activeCategory && (
+            <button
+              onClick={() => onSelectCategory(null)}
+              className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors font-medium cursor-pointer"
+            >
+              Clear Filter (Show All)
+            </button>
+          )}
+          {onManageFolders && (
+            <button
+              type="button"
+              onClick={onManageFolders}
+              className="inline-flex items-center gap-1.5 min-h-[32px] px-2.5 rounded-lg text-xs font-medium text-zinc-300 hover:text-white bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 transition-colors cursor-pointer"
+            >
+              <FolderCog className="w-3.5 h-3.5 text-indigo-400" />
+              Manage folders
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center gap-2 overflow-x-auto pb-2 pt-0.5 scrollbar-thin scrollbar-thumb-zinc-800 scroll-smooth touch-pan-x">

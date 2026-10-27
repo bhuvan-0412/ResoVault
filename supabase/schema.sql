@@ -6,9 +6,13 @@ CREATE TABLE IF NOT EXISTS public.categories (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  position DOUBLE PRECISION,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT unique_user_category UNIQUE (user_id, name)
 );
+
+-- Migration support for existing deployments (per-user folder order)
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS position DOUBLE PRECISION;
 
 -- 2. Create resources table
 CREATE TABLE IF NOT EXISTS public.resources (
@@ -122,6 +126,14 @@ CREATE POLICY "Users can delete their own categories"
   FOR DELETE
   USING (auth.uid() = user_id);
 
+-- Needed for renaming and reordering folders
+DROP POLICY IF EXISTS "Users can update their own categories" ON public.categories;
+CREATE POLICY "Users can update their own categories"
+  ON public.categories
+  FOR UPDATE
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
 -- 10. Row Level Security Policies for news_articles
 -- Shared read-only content: Any authenticated user can read all rows
 DROP POLICY IF EXISTS "Anyone authenticated can view news articles" ON public.news_articles;
@@ -188,17 +200,24 @@ CREATE POLICY "Users can insert their own article clicks"
 -- NOTE: UPDATE and DELETE policies are intentionally omitted so click history
 -- cannot be tampered with or deleted by users.
 
--- 13. Trigger to auto-seed default categories & topics on new user signup
+-- 13. Trigger to auto-seed the 11 standard folders & default topics on new user signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  -- Seed the 4 starting categories
-  INSERT INTO public.categories (user_id, name)
+  -- Seed the 11 standard folders
+  INSERT INTO public.categories (user_id, name, position)
   VALUES
-    (NEW.id, 'Video Editing'),
-    (NEW.id, 'Development'),
-    (NEW.id, 'Content Creation'),
-    (NEW.id, 'Product Management')
+    (NEW.id, 'Content', 1000),
+    (NEW.id, 'Video Editing', 2000),
+    (NEW.id, 'AI Tools & Prompts', 3000),
+    (NEW.id, 'Design & Web', 4000),
+    (NEW.id, 'Dev & GitHub', 5000),
+    (NEW.id, 'Product Management', 6000),
+    (NEW.id, 'Career & Roadmaps', 7000),
+    (NEW.id, 'Startups', 8000),
+    (NEW.id, 'Certificates', 9000),
+    (NEW.id, 'Acads', 10000),
+    (NEW.id, 'Personal', 11000)
   ON CONFLICT (user_id, name) DO NOTHING;
 
   -- Seed default user topics
