@@ -1,51 +1,38 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { X, Sparkles, AlertCircle, Clock, FileText, Tag, CheckCircle2 } from 'lucide-react';
-import { ScriptItem, ScriptStatus } from '@/lib/types';
-import { formatScriptMetrics, SCRIPT_STATUS_CONFIG, SCRIPT_STATUS_ORDER } from '@/lib/scripts-utils';
+import React, { useState } from 'react';
+import { X, AlertCircle, Clock, FileText, Tag, CheckCircle2 } from 'lucide-react';
+import { NewScriptInput, ScriptItem, ScriptStatus } from '@/lib/types';
+import {
+  formatScriptMetrics,
+  fromDateInputValue,
+  SCRIPT_STATUS_CONFIG,
+  SCRIPT_STATUS_ORDER,
+  toDateInputValue,
+} from '@/lib/scripts-utils';
 
 interface AddEditScriptModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (scriptData: Omit<ScriptItem, 'id' | 'createdAt' | 'updatedAt' | 'shotAt' | 'postedAt'> | ScriptItem) => Promise<void>;
+  onSave: (scriptData: NewScriptInput | (NewScriptInput & { id: string })) => Promise<void>;
   editingScript: ScriptItem | null;
 }
 
-export const AddEditScriptModal: React.FC<AddEditScriptModalProps> = ({
-  isOpen,
+const ScriptForm: React.FC<Omit<AddEditScriptModalProps, 'isOpen'>> = ({
   onClose,
   onSave,
   editingScript,
 }) => {
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
-  const [status, setStatus] = useState<ScriptStatus>('needs_corrections');
-  const [correctionsNote, setCorrectionsNote] = useState('');
+  const [title, setTitle] = useState(editingScript?.title || '');
+  const [body, setBody] = useState(editingScript?.body || '');
+  const [status, setStatus] = useState<ScriptStatus>(editingScript?.status || 'needs_corrections');
+  const [correctionsNote, setCorrectionsNote] = useState(editingScript?.correctionsNote || '');
   const [tagInput, setTagInput] = useState('');
-  const [tags, setTags] = useState<string[]>([]);
+  const [tags, setTags] = useState<string[]>(editingScript?.tags || []);
+  const [shotOn, setShotOn] = useState(toDateInputValue(editingScript?.shotAt));
+  const [postedOn, setPostedOn] = useState(toDateInputValue(editingScript?.postedAt));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (editingScript) {
-      setTitle(editingScript.title || '');
-      setBody(editingScript.body || '');
-      setStatus(editingScript.status || 'needs_corrections');
-      setCorrectionsNote(editingScript.correctionsNote || '');
-      setTags(editingScript.tags || []);
-    } else {
-      setTitle('');
-      setBody('');
-      setStatus('needs_corrections');
-      setCorrectionsNote('');
-      setTags([]);
-    }
-    setTagInput('');
-    setError(null);
-  }, [editingScript, isOpen]);
-
-  if (!isOpen) return null;
 
   const { words, speakingTime } = formatScriptMetrics(body);
 
@@ -76,19 +63,25 @@ export const AddEditScriptModal: React.FC<AddEditScriptModalProps> = ({
     setError(null);
 
     try {
-      const scriptPayload = {
-        ...(editingScript ? { id: editingScript.id } : {}),
+      // Blank date = "now" for a newly entered stage; existing dates are kept
+      const showsShot = status === 'shot' || status === 'posted';
+      const shotAt = showsShot && shotOn ? fromDateInputValue(shotOn) : undefined;
+      const postedAt = status === 'posted' && postedOn ? fromDateInputValue(postedOn) : undefined;
+
+      const scriptPayload: NewScriptInput = {
         title: title.trim(),
         body: body.trim(),
         status,
         correctionsNote: correctionsNote.trim() || null,
         tags,
+        ...(shotAt ? { shotAt } : {}),
+        ...(postedAt ? { postedAt } : {}),
       };
 
-      await onSave(scriptPayload as any);
+      await onSave(editingScript ? { ...scriptPayload, id: editingScript.id } : scriptPayload);
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Failed to save script');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save script');
     } finally {
       setSaving(false);
     }
@@ -164,6 +157,41 @@ export const AddEditScriptModal: React.FC<AddEditScriptModalProps> = ({
             </div>
           </div>
 
+          {/* Shot / Posted dates (backfill old videos) */}
+          {(status === 'shot' || status === 'posted') && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="script-shot-on" className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                  Shot on
+                </label>
+                <input
+                  id="script-shot-on"
+                  type="date"
+                  value={shotOn}
+                  onChange={(e) => setShotOn(e.target.value)}
+                  className="w-full px-3.5 py-2 text-sm bg-zinc-950 rounded-xl border border-zinc-800 text-zinc-100 focus:outline-none focus:border-indigo-500 [color-scheme:dark]"
+                />
+              </div>
+              {status === 'posted' && (
+                <div>
+                  <label htmlFor="script-posted-on" className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                    Posted on
+                  </label>
+                  <input
+                    id="script-posted-on"
+                    type="date"
+                    value={postedOn}
+                    onChange={(e) => setPostedOn(e.target.value)}
+                    className="w-full px-3.5 py-2 text-sm bg-zinc-950 rounded-xl border border-zinc-800 text-zinc-100 focus:outline-none focus:border-indigo-500 [color-scheme:dark]"
+                  />
+                </div>
+              )}
+              <p className="sm:col-span-2 -mt-1 text-[11px] text-zinc-500">
+                Leave blank to use today. Set an earlier date to backfill old videos.
+              </p>
+            </div>
+          )}
+
           {/* Script Body */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
@@ -194,11 +222,11 @@ export const AddEditScriptModal: React.FC<AddEditScriptModalProps> = ({
             <label className="block text-xs font-semibold text-zinc-300 mb-1 flex items-center justify-between">
               <span className="flex items-center gap-1.5">
                 <AlertCircle className={`w-3.5 h-3.5 ${status === 'needs_corrections' ? 'text-amber-400' : 'text-zinc-400'}`} />
-                <span>Corrections Note (What needs to be fixed?)</span>
+                <span>Notes (what still needs work?)</span>
               </span>
               {status === 'needs_corrections' && (
                 <span className="text-[10px] uppercase font-bold tracking-wider text-amber-400">
-                  Visible on Card
+                  Shown on card
                 </span>
               )}
             </label>
@@ -297,4 +325,10 @@ export const AddEditScriptModal: React.FC<AddEditScriptModalProps> = ({
       </div>
     </div>
   );
+};
+
+export const AddEditScriptModal: React.FC<AddEditScriptModalProps> = ({ isOpen, ...rest }) => {
+  if (!isOpen) return null;
+  // Keyed so the form starts fresh each time it opens or switches script
+  return <ScriptForm key={rest.editingScript?.id ?? 'new'} {...rest} />;
 };

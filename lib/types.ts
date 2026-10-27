@@ -102,7 +102,14 @@ export interface ScriptItem {
   updatedAt: string;
   shotAt?: string | null;
   postedAt?: string | null;
+  /** Fractional sort key within a status column (custom order). */
+  position?: number | null;
 }
+
+export type NewScriptInput = Omit<ScriptItem, 'id' | 'createdAt' | 'updatedAt' | 'shotAt' | 'postedAt'> & {
+  shotAt?: string | null;
+  postedAt?: string | null;
+};
 
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0 = Sunday, 1 = Monday...
 

@@ -45,3 +45,7 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# local data exports
+links-export.csv
+categories-export.csv

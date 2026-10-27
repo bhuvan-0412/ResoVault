@@ -397,7 +397,7 @@ export const ShootDayModal: React.FC<ShootDayModalProps> = ({
                                 <span className="ml-2 text-emerald-400 font-semibold">• Ready to Shoot</span>
                               )}
                               {script.status === 'needs_corrections' && (
-                                <span className="ml-2 text-amber-400 font-semibold">• Needs Corrections</span>
+                                <span className="ml-2 text-amber-400 font-semibold">• Draft</span>
                               )}
                             </p>
                           </div>
